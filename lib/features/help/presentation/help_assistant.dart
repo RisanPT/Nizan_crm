@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nizan_crm/features/help/controllers/help_chat_controller.dart';
 import 'package:nizan_crm/features/help/services/help_service.dart';
@@ -13,6 +14,11 @@ const _kWide = 700.0;
 const _kBotName = 'Team N';
 
 /// Floating help button shown on every signed-in screen; opens the Team N chat.
+///
+/// It is a slim tab hugging the RIGHT EDGE — in the page's side margin, not over its content — instead of a big round button over the
+/// bottom-right corner, where pages keep their main action buttons (Save, Convert…). It can be dragged up or down the edge (and remembers
+/// where it was left), so it can always be moved off whatever it is next to. Tapping it, the "Need help?" nudge and the chat itself work
+/// exactly as before.
 class HelpAssistantOverlay extends ConsumerStatefulWidget {
   final Widget child;
   const HelpAssistantOverlay({super.key, required this.child});
@@ -34,9 +40,35 @@ class _HelpAssistantOverlayState extends ConsumerState<HelpAssistantOverlay>
   Timer? _showTimer;
   Timer? _hideTimer;
 
+  // The tab's place on the edge, 0 (top) to 1 (bottom) of the room it may move in; kept between visits.
+  static const _kPrefKey = 'help.assistant.edge';
+  static const _kTabW = 26.0;
+  static const _kTabH = 64.0;
+  static const _kHitW = 44.0; // a finger-sized target around the slim tab
+  static const _kDefaultPlace = 0.7;
+  double _place = _kDefaultPlace;
+
+  Future<void> _restorePlace() async {
+    try {
+      final v = (await SharedPreferences.getInstance()).getDouble(_kPrefKey);
+      if (v != null && mounted) setState(() => _place = v.clamp(0.0, 1.0));
+    } catch (_) {
+      // no stored place (or no storage): the default is fine
+    }
+  }
+
+  Future<void> _savePlace() async {
+    try {
+      await (await SharedPreferences.getInstance()).setDouble(_kPrefKey, _place);
+    } catch (_) {
+      // not remembered this time; nothing else depends on it
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _restorePlace();
     if (!_nudged) {
       _showTimer = Timer(const Duration(milliseconds: 1500), () {
         if (!mounted) return;
@@ -64,115 +96,116 @@ class _HelpAssistantOverlayState extends ConsumerState<HelpAssistantOverlay>
     return Stack(
       children: [
         widget.child,
-        Positioned(
-          right: 16,
-          // Clear of the mobile bottom navigation bar.
-          bottom: narrow ? 92 : 20,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                switchInCurve: Curves.easeOutBack,
-                transitionBuilder: (c, a) => FadeTransition(
-                  opacity: a,
-                  child: SlideTransition(
-                    position: Tween(begin: const Offset(0.3, 0), end: Offset.zero)
-                        .animate(a),
-                    child: c,
-                  ),
-                ),
-                child: _showNudge
-                    ? GestureDetector(
-                        key: const ValueKey('nudge'),
-                        onTap: () {
-                          setState(() => _showNudge = false);
-                          _open(context);
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 10),
-                          padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
-                          decoration: BoxDecoration(
-                            color: cs.surface,
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: const [
-                              BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 14,
-                                  offset: Offset(0, 4)),
-                            ],
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // Room to move: below the top bar, above the mobile bottom navigation bar.
+              const minTop = 72.0;
+              final maxTop = math.max(minTop, box.maxHeight - _kTabH - (narrow ? 104 : 24));
+              final top = minTop + _place * (maxTop - minTop);
+              return Stack(
+                children: [
+                  Positioned(
+                    right: 0,
+                    top: top,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 350),
+                          switchInCurve: Curves.easeOutBack,
+                          transitionBuilder: (c, a) => FadeTransition(
+                            opacity: a,
+                            child: SlideTransition(
+                              position: Tween(begin: const Offset(0.3, 0), end: Offset.zero).animate(a),
+                              child: c,
+                            ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('👋 Need help? Ask Team N',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600, fontSize: 13)),
-                              const SizedBox(width: 4),
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => setState(() => _showNudge = false),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(Icons.close,
-                                      size: 14, color: cs.onSurfaceVariant),
+                          child: _showNudge
+                              ? GestureDetector(
+                                  key: const ValueKey('nudge'),
+                                  onTap: () {
+                                    setState(() => _showNudge = false);
+                                    _open(context);
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(right: 6),
+                                    padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
+                                    decoration: BoxDecoration(
+                                      color: cs.surface,
+                                      borderRadius: BorderRadius.circular(22),
+                                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 14, offset: Offset(0, 4))],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('👋 Need help? Ask Team N', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                        const SizedBox(width: 4),
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () => setState(() => _showNudge = false),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(4),
+                                            child: Icon(Icons.close, size: 14, color: cs.onSurfaceVariant),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(key: ValueKey('none')),
+                        ),
+                        Tooltip(
+                          message: 'Ask $_kBotName',
+                          child: Semantics(
+                            button: true,
+                            label: 'Ask $_kBotName',
+                            child: GestureDetector(
+                              key: const Key('helpTab'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => _open(context),
+                              // slide it along the edge to move it off whatever it is next to
+                              onVerticalDragUpdate: (d) {
+                                if (maxTop <= minTop) return;
+                                setState(() => _place = (_place + d.delta.dy / (maxTop - minTop)).clamp(0.0, 1.0));
+                              },
+                              onVerticalDragEnd: (_) => _savePlace(),
+                              child: SizedBox(
+                                width: _kHitW,
+                                height: _kTabH,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: AnimatedBuilder(
+                                    animation: _pulse,
+                                    builder: (_, child) {
+                                      // a soft glow that draws the eye without taking more room
+                                      final glow = 0.5 - 0.5 * math.cos(2 * math.pi * _pulse.value);
+                                      return Container(
+                                        width: _kTabW,
+                                        height: _kTabH,
+                                        decoration: BoxDecoration(
+                                          gradient: _brandGradient(cs),
+                                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                                          boxShadow: [
+                                            BoxShadow(color: cs.primary.withValues(alpha: 0.22 + 0.2 * glow), blurRadius: 8 + 8 * glow, offset: const Offset(-2, 2)),
+                                          ],
+                                        ),
+                                        child: child,
+                                      );
+                                    },
+                                    child: const Center(child: _NMark(size: 16, onDark: true)),
+                                  ),
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      )
-                    : const SizedBox.shrink(key: ValueKey('none')),
-              ),
-              Tooltip(
-                message: 'Ask $_kBotName',
-                child: GestureDetector(
-                  onTap: () => _open(context),
-                  child: SizedBox(
-                    width: 74,
-                    height: 74,
-                    child: AnimatedBuilder(
-                      animation: _pulse,
-                      builder: (_, child) {
-                        final t = _pulse.value;
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Expanding ring that draws the eye to the button.
-                            Container(
-                              width: 54 + 20 * t,
-                              height: 54 + 20 * t,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: cs.primary
-                                    .withValues(alpha: 0.28 * (1 - t)),
-                              ),
-                            ),
-                            child!,
-                          ],
-                        );
-                      },
-                      child: Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: _brandGradient(cs),
-                          boxShadow: [
-                            BoxShadow(
-                                color: cs.primary.withValues(alpha: 0.35),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6)),
-                          ],
-                        ),
-                        child: const Center(
-                            child: _NMark(size: 26, onDark: true)),
-                      ),
+                      ],
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ],

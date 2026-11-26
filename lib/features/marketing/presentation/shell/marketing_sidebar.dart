@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/routing/app_router.dart' show isRouteAllowed;
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/services/marketing_eod_service.dart' show marketingEodAccessProvider;
 
 /// One entry of the Marketing menu: where it goes, and which route decides whether this login may see it.
 class MktNavItem {
@@ -36,6 +37,8 @@ const kMarketingNav = <MktNavItem>[
     MktNavItem('portfolio.calendar', 'Production Calendar', Icons.calendar_month_outlined, '/marketing/portfolio?tab=calendar'),
     MktNavItem('portfolio.reports', 'Shoot Reports', Icons.bar_chart_rounded, '/marketing/portfolio?tab=reports'),
     MktNavItem('portfolio.gallery', 'Gallery', Icons.photo_library_outlined, '/marketing/portfolio?tab=gallery'),
+    MktNavItem('portfolio.footage', 'Footage', Icons.video_library_outlined, '/marketing/portfolio?tab=footage'),
+    MktNavItem('portfolio.quality', 'Artist Quality', Icons.star_half_rounded, '/marketing/portfolio?tab=quality'),
   ]),
   MktNavItem('socials', 'Socials', Icons.share_outlined, '/marketing/socials', children: [
     MktNavItem('socials.overview', 'Overview', Icons.home_outlined, '/marketing/socials?tab=overview'),
@@ -45,10 +48,43 @@ const kMarketingNav = <MktNavItem>[
     MktNavItem('socials.performance', 'Performance', Icons.bar_chart_rounded, '/marketing/socials?tab=performance'),
     MktNavItem('socials.reports', 'Reports & Insights', Icons.insights_outlined, '/marketing/socials?tab=reports'),
   ]),
-  MktNavItem('coordinations', 'Coordinations', Icons.hub_outlined, '/marketing/coordinations', built: false),
-  MktNavItem('strategies', 'Strategies & Developments', Icons.flag_outlined, '/marketing/strategies', built: false),
-  MktNavItem('campaigns', 'Campaigns', Icons.campaign_outlined, '/marketing/campaigns'),
-  MktNavItem('leads', 'Lead Report', Icons.person_search_outlined, '/marketing/leads-report', matches: ['/marketing/re-engagement']),
+  MktNavItem('coordinations', 'Coordinations', Icons.hub_outlined, '/marketing/coordinations', children: [
+    MktNavItem('coordinations.overview', 'Overview', Icons.home_outlined, '/marketing/coordinations?tab=overview'),
+    MktNavItem('coordinations.requests', 'Requests & Tasks', Icons.assignment_outlined, '/marketing/coordinations?tab=requests'),
+    MktNavItem('coordinations.interdepartment', 'Inter-Department', Icons.swap_horiz_rounded, '/marketing/coordinations?tab=interdepartment'),
+    MktNavItem('coordinations.approvals', 'Approvals', Icons.verified_outlined, '/marketing/coordinations?tab=approvals'),
+    MktNavItem('coordinations.meetings', 'Meetings', Icons.event_outlined, '/marketing/coordinations?tab=meetings'),
+    MktNavItem('coordinations.followups', 'Follow-ups', Icons.notifications_active_outlined, '/marketing/coordinations?tab=followups'),
+  ]),
+  MktNavItem('strategies', 'Strategies & Developments', Icons.flag_outlined, '/marketing/strategies', children: [
+    MktNavItem('strategies.overview', 'Overview', Icons.home_outlined, '/marketing/strategies?tab=overview'),
+    MktNavItem('strategies.plans', 'Strategic Plans', Icons.map_outlined, '/marketing/strategies?tab=plans'),
+    MktNavItem('strategies.projects', 'Development Projects', Icons.construction_outlined, '/marketing/strategies?tab=projects'),
+    MktNavItem('strategies.roadmap', 'Roadmap', Icons.timeline_rounded, '/marketing/strategies?tab=roadmap'),
+    MktNavItem('strategies.initiatives', 'Initiatives', Icons.rocket_launch_outlined, '/marketing/strategies?tab=initiatives'),
+    MktNavItem('strategies.research', 'Research & Insights', Icons.travel_explore_outlined, '/marketing/strategies?tab=research'),
+    MktNavItem('strategies.reviews', 'Reviews', Icons.fact_check_outlined, '/marketing/strategies?tab=reviews'),
+  ]),
+  MktNavItem('campaigns', 'Campaigns', Icons.campaign_outlined, '/marketing/campaigns', children: [
+    MktNavItem('campaigns.overview', 'Overview', Icons.home_outlined, '/marketing/campaigns?tab=overview'),
+    MktNavItem('campaigns.campaigns', 'All Campaigns', Icons.list_alt_rounded, '/marketing/campaigns?tab=campaigns'),
+    MktNavItem('campaigns.performance', 'Performance', Icons.bar_chart_rounded, '/marketing/campaigns?tab=performance'),
+    MktNavItem('campaigns.creatives', 'Creatives & Ads', Icons.image_outlined, '/marketing/campaigns?tab=creatives'),
+    MktNavItem('campaigns.budget', 'Budget & Spend', Icons.account_balance_wallet_outlined, '/marketing/campaigns?tab=budget'),
+    MktNavItem('campaigns.leads', 'Leads & Conversions', Icons.filter_alt_outlined, '/marketing/campaigns?tab=leads'),
+    MktNavItem('campaigns.reports', 'Reports & Insights', Icons.insights_outlined, '/marketing/campaigns?tab=reports'),
+  ]),
+  MktNavItem('leads', 'Lead Report', Icons.person_search_outlined, '/marketing/leads-report', matches: ['/marketing/re-engagement'], children: [
+    MktNavItem('leads.overview', 'Overview', Icons.home_outlined, '/marketing/leads-report?tab=overview'),
+    MktNavItem('leads.leads', 'All Leads', Icons.people_alt_outlined, '/marketing/leads-report?tab=leads'),
+    MktNavItem('leads.stages', 'Lead Stages', Icons.filter_alt_outlined, '/marketing/leads-report?tab=stages'),
+    MktNavItem('leads.sources', 'Sources', Icons.hub_outlined, '/marketing/leads-report?tab=sources'),
+    MktNavItem('leads.followups', 'Follow-ups', Icons.notifications_active_outlined, '/marketing/leads-report?tab=followups'),
+    MktNavItem('leads.speed', 'Speed to lead', Icons.timer_outlined, '/marketing/leads-report?tab=speed'),
+    MktNavItem('leads.conversion', 'Conversion', Icons.trending_up_rounded, '/marketing/leads-report?tab=conversion'),
+    MktNavItem('leads.reports', 'Reports', Icons.description_outlined, '/marketing/leads-report?tab=reports'),
+  ]),
+  MktNavItem('markets', 'Countries & Cities', Icons.public_outlined, '/marketing/markets'),
   MktNavItem('team', 'Team Dashboard', Icons.groups_2_outlined, '/marketing/team', matches: ['/marketing/eod'], children: [
     MktNavItem('team.overview', 'Overview', Icons.home_outlined, '/marketing/team?tab=overview'),
     MktNavItem('team.activity', 'Team Activity', Icons.bolt_outlined, '/marketing/team?tab=activity'),
@@ -61,11 +97,14 @@ const kMarketingNav = <MktNavItem>[
   MktNavItem('content', 'Content', Icons.photo_library_outlined, '/marketing/content/dashboard', matches: ['/marketing/content']),
   MktNavItem('analytics', 'Analytics', Icons.insights_outlined, '/marketing/analytics'),
   MktNavItem('calendar', 'Sales Calendar', Icons.calendar_month_outlined, '/marketing/calendar'),
-  MktNavItem('weekly', 'Weekly Report', Icons.summarize_outlined, '/marketing/weekly', built: false),
+  MktNavItem('weekly', 'Weekly Report', Icons.summarize_outlined, '/marketing/weekly'),
   MktNavItem('competitors', 'Competitors', Icons.radar_outlined, '/marketing/competitors'),
   MktNavItem('scores', 'Weekly Score', Icons.speed_outlined, '/marketing/scores'),
   MktNavItem('insights', 'Insights', Icons.lightbulb_outline_rounded, '/marketing/insights'),
 ];
+
+/// Where the sidebar's Setup link goes: the EOD screen, whose Setup tab holds the team, roles, activities, targets and calendar.
+const kMarketingSetupRoute = '/marketing/eod';
 
 /// The route a menu entry is gated by (a few go through a different permission than their own path).
 @visibleForTesting
@@ -117,7 +156,7 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
   // which parents the person has opened or closed by hand; a parent not in here follows the route (open while you are inside it)
   final Map<String, bool> _open = {};
 
-  static const _active = Color(0xFF86315A);
+  static const _active = Color(0xFF6E2234); // the selected item: a lighter burgundy on the deep-burgundy sidebar
 
   bool _selected(MktNavItem item, String path, String? tab) {
     if (item.children.isNotEmpty) return path == item.route || item.matches.any(path.startsWith);
@@ -159,6 +198,9 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
     final width = collapsed ? 76.0 : 250.0;
 
     bool allowed(String route) => isRouteAllowed(Uri.parse(route).path, access);
+    // the EOD Setup (team, roles, activities, targets, calendar) — for the Marketing Manager / admin, the people the server lets change it
+    final isManager = ref.watch(marketingEodAccessProvider).maybeWhen(data: (a) => a.isManager, orElse: () => false);
+    final showSetup = isManager && allowed(kMarketingSetupRoute);
 
     bool insideParent(MktNavItem it) => path == Uri.parse(it.route).path || it.matches.any(path.startsWith);
     bool isOpen(MktNavItem it) => !collapsed && (_open[it.id] ?? insideParent(it));
@@ -173,7 +215,8 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
         key: Key('mkt_nav_${it.id}'),
         icon: it.icon,
         label: it.label,
-        selected: sel && (!hasKids || !open || (path == '/marketing/eod')),
+        // on the EOD screen the Team Dashboard stays lit; the Setup link (when it is shown) carries the highlight
+        selected: sel && (!hasKids || !open || (path == kMarketingSetupRoute && !showSetup)),
         lit: sel,
         collapsed: collapsed,
         child: child,
@@ -194,7 +237,7 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
 
     return Container(
       width: width,
-      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Mkt.maroon, Mkt.maroonDeep])),
+      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Mkt.sidebarTop, Mkt.maroonDeep])),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: 18),
         _Logo(collapsed: collapsed),
@@ -210,6 +253,11 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
             // Team N Website (public-site CMS) — the Marketing login has no main menu, so its link lives here.
             if (access.canSeeWebsite)
               _NavTile(key: const Key('mkt_nav_website'), icon: Icons.language_outlined, label: 'Team N Website', selected: path.startsWith('/website'), lit: path.startsWith('/website'), collapsed: collapsed, onTap: () => _go(context, '/website')),
+            if (showSetup) ...[
+              const SizedBox(height: 18),
+              if (!collapsed) Padding(padding: const EdgeInsets.fromLTRB(10, 0, 10, 6), child: Text('SETTINGS', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white54, spacing: 1.2))),
+              _NavTile(key: const Key('mkt_nav_setup'), icon: Icons.tune_rounded, label: 'Setup', selected: path == kMarketingSetupRoute, lit: path == kMarketingSetupRoute, collapsed: collapsed, onTap: () => _go(context, '$kMarketingSetupRoute?tab=setup')),
+            ],
             if (hasDepartment) ...[
               const SizedBox(height: 18),
               if (!collapsed) Padding(padding: const EdgeInsets.fromLTRB(10, 0, 10, 6), child: Text('MY DEPARTMENT', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white54, spacing: 1.2))),
@@ -254,10 +302,10 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
                     _FooterAction(icon: Icons.logout_rounded, label: 'Logout', selected: false, onTap: () => _logout(context)),
                   ])
                 : Row(children: [
-                    _FooterAction(icon: Icons.bug_report_outlined, label: 'Support', selected: path.startsWith('/helpdesk'), onTap: () => _go(context, '/helpdesk')),
-                    _FooterAction(icon: Icons.cloud_download_outlined, label: 'Backup', selected: path.startsWith('/backup'), onTap: () => _go(context, '/backup')),
-                    _FooterAction(icon: Icons.account_circle_outlined, label: 'Profile', selected: path == '/profile', onTap: () => _go(context, '/profile')),
-                    _FooterAction(icon: Icons.logout_rounded, label: 'Logout', selected: false, onTap: () => _logout(context)),
+                    Expanded(child: _FooterAction(icon: Icons.bug_report_outlined, label: 'Support', selected: path.startsWith('/helpdesk'), onTap: () => _go(context, '/helpdesk'))),
+                    Expanded(child: _FooterAction(icon: Icons.cloud_download_outlined, label: 'Backup', selected: path.startsWith('/backup'), onTap: () => _go(context, '/backup'))),
+                    Expanded(child: _FooterAction(icon: Icons.account_circle_outlined, label: 'Profile', selected: path == '/profile', onTap: () => _go(context, '/profile'))),
+                    Expanded(child: _FooterAction(icon: Icons.logout_rounded, label: 'Logout', selected: false, onTap: () => _logout(context))),
                   ]),
           ),
         ),
@@ -310,6 +358,8 @@ class _NavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = selected || lit ? Colors.white : Colors.white.withValues(alpha: 0.74);
+    // an open tile shows its own label; only the icon-only (collapsed) sidebar needs a tooltip to say what the icon is
+    Widget maybeTip(Widget w) => collapsed ? Tooltip(message: label, child: w) : w;
     return Padding(
       padding: EdgeInsets.only(left: child && !collapsed ? 14 : 0, top: 1.5, bottom: 1.5),
       child: Material(
@@ -319,9 +369,8 @@ class _NavTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           hoverColor: Colors.white.withValues(alpha: 0.06),
           onTap: onTap,
-          child: Tooltip(
-            message: collapsed ? label : '',
-            child: Padding(
+          child: maybeTip(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: collapsed ? 8 : 11, vertical: child ? 7 : 9),
               child: Row(mainAxisAlignment: collapsed ? MainAxisAlignment.center : MainAxisAlignment.start, children: [
                 Icon(icon, size: child ? 17 : 20, color: fg),
@@ -362,6 +411,6 @@ class _FooterAction extends StatelessWidget {
         ]),
       ),
     );
-    return Expanded(child: Tooltip(message: label, child: body));
+    return Tooltip(message: label, child: body);
   }
 }

@@ -64,13 +64,13 @@ Future<void> downloadDashboardReport({
       ),
       build: (context) {
         final title = switch (reportType) {
-          'sales' => 'Team N ERP Sales Report',
-          'marketing' => 'Team N ERP Marketing Report',
-          'crm' => 'Team N ERP Client Relations Report',
-          'finance' => 'Team N ERP Finance Report',
-          'ceo_daily' => 'DAILY SALES REPORT | Team N ERP',
-          'forecast' => 'Team N ERP Sales Forecast Report',
-          _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N ERP Executive Overview',
+          'sales' => 'Team N Makeovers Sales Report',
+          'marketing' => 'Team N Makeovers Marketing Report',
+          'crm' => 'Team N Makeovers Client Relations Report',
+          'finance' => 'Team N Makeovers Finance Report',
+          'ceo_daily' => 'DAILY SALES REPORT | Team N Makeovers',
+          'forecast' => 'Team N Makeovers Sales Forecast Report',
+          _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N Makeovers Executive Overview',
         };
 
         return [
@@ -886,6 +886,8 @@ Future<void> downloadLeadsReport({
   String sourceFilter = 'All',
   String searchQuery = '',
   List<CrmUser> users = const [],
+  String? periodLabel,
+  String? fileTag,
 }) async {
   if (_cachedLogoBytes == null) {
     final logoData = await rootBundle.load('assets/images/teamn_logo.png');
@@ -923,7 +925,7 @@ Future<void> downloadLeadsReport({
               pw.Image(logoImage, width: 40, height: 40),
               pw.SizedBox(width: 12),
               pw.Text(
-                'Team N ERP Leads Report',
+                'Team N Makeovers Leads Report',
                 style: pw.TextStyle(
                   fontSize: 24,
                   fontWeight: pw.FontWeight.bold,
@@ -942,7 +944,7 @@ Future<void> downloadLeadsReport({
           ),
           pw.SizedBox(height: 4),
           pw.Text(
-            'Filters applied - Status: $statusFilter | Source: $sourceFilter${searchQuery.isNotEmpty ? " | Search: '$searchQuery'" : ""}',
+            'Filters applied - Status: $statusFilter | Source: $sourceFilter${searchQuery.isNotEmpty ? " | Search: '$searchQuery'" : ""}${periodLabel != null ? " | Dates: $periodLabel" : ""}',
             style: const pw.TextStyle(
               fontSize: 10,
               color: PdfColors.blueGrey600,
@@ -982,7 +984,7 @@ Future<void> downloadLeadsReport({
 
   final bytes = await pdf.save();
   final tempDir = await getTemporaryDirectory();
-  final file = File('${tempDir.path}/leads-report-${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}.pdf');
+  final file = File('${tempDir.path}/leads-report-${fileTag ?? '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}'}.pdf');
   await file.writeAsBytes(bytes);
   await Share.shareXFiles(
     [XFile(file.path)],
@@ -1194,13 +1196,13 @@ Future<void> downloadDashboardReportCsv({
   );
 
   final title = switch (reportType) {
-    'sales' => 'Team N ERP Sales Report',
-    'marketing' => 'Team N ERP Marketing Report',
-    'crm' => 'Team N ERP Client Relations Report',
-    'finance' => 'Team N ERP Finance Report',
-    'ceo_daily' => 'DAILY SALES REPORT | Team N ERP',
-    'forecast' => 'Team N ERP Sales Forecast Report',
-    _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N ERP Executive Overview',
+    'sales' => 'Team N Makeovers Sales Report',
+    'marketing' => 'Team N Makeovers Marketing Report',
+    'crm' => 'Team N Makeovers Client Relations Report',
+    'finance' => 'Team N Makeovers Finance Report',
+    'ceo_daily' => 'DAILY SALES REPORT | Team N Makeovers',
+    'forecast' => 'Team N Makeovers Sales Forecast Report',
+    _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N Makeovers Executive Overview',
   };
 
   // Same rounding as the PDF ("INR 1234"), kept numeric for Excel.

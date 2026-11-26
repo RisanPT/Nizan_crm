@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
@@ -2299,9 +2301,12 @@ class _AccountsCollectionsScreenState
 
   void _showReportDialog(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    final now = DateTime.now();
-    int selMonth = now.month;
-    int selYear = now.year;
+    // the dates start as the ones on this screen (a month, or the range picked); "all time" is too wide for a report, so it begins on this financial year
+    var selRange = switch (_period) {
+      FinancePeriod.month => monthRange(_month),
+      FinancePeriod.range => _range == null ? reportRangeFor(ReportPreset.thisMonth, DateTime.now()) : ReportRange(from: _range!.start, to: _range!.end),
+      FinancePeriod.all => reportRangeFor(ReportPreset.thisFy, DateTime.now()),
+    };
     String? selArtist = 'all';
     String selFormat = 'pdf';
     bool busy = false;
@@ -2316,8 +2321,7 @@ class _AccountsCollectionsScreenState
             setLocal(() => busy = true);
             try {
               await ref.read(reportServiceProvider).downloadFinanceReport(
-                    month: selMonth,
-                    year: selYear,
+                    range: selRange,
                     employeeId: selArtist,
                     format: selFormat,
                   );
@@ -2327,12 +2331,6 @@ class _AccountsCollectionsScreenState
               if (ctx.mounted) showErrorSnackBar(ctx, e);
             }
           }
-
-          Widget preset(String label, VoidCallback onTap) => ActionChip(
-                label: Text(label, style: const TextStyle(fontSize: 12)),
-                onPressed: busy ? null : onTap,
-                visualDensity: VisualDensity.compact,
-              );
 
           Widget formatCard(
               String value, IconData icon, String label, String sub) {
@@ -2405,60 +2403,14 @@ class _AccountsCollectionsScreenState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Collections & invoice balances for a month.',
+                    Text('Collections and expenses for the dates you choose.',
                         style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
                     14.h,
-                    Row(
-                      children: [
-                        preset('This month', () => setLocal(() {
-                              selMonth = now.month;
-                              selYear = now.year;
-                            })),
-                        8.w,
-                        preset('Last month', () => setLocal(() {
-                              final lm = DateTime(now.year, now.month - 1);
-                              selMonth = lm.month;
-                              selYear = lm.year;
-                            })),
-                      ],
-                    ),
-                    14.h,
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<int>(
-                            decoration:
-                                const InputDecoration(labelText: 'Month'),
-                            initialValue: selMonth,
-                            items: List.generate(
-                              12,
-                              (i) => DropdownMenuItem(
-                                value: i + 1,
-                                child: Text(_getMonthName(i + 1)),
-                              ),
-                            ),
-                            onChanged: busy
-                                ? null
-                                : (v) => setLocal(() => selMonth = v!),
-                          ),
-                        ),
-                        12.w,
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonFormField<int>(
-                            decoration: const InputDecoration(labelText: 'Year'),
-                            initialValue: selYear,
-                            items: [now.year - 1, now.year]
-                                .map((y) => DropdownMenuItem(
-                                    value: y, child: Text(y.toString())))
-                                .toList(),
-                            onChanged: busy
-                                ? null
-                                : (v) => setLocal(() => selYear = v!),
-                          ),
-                        ),
-                      ],
+                    ReportRangeTile(
+                      range: selRange,
+                      enabled: !busy,
+                      maxDays: kMaxFinanceReportDays,
+                      onChanged: (r) => setLocal(() => selRange = r),
                     ),
                     14.h,
                     () {
@@ -2495,8 +2447,12 @@ class _AccountsCollectionsScreenState
                       formatCard('pdf', Icons.picture_as_pdf_outlined, 'PDF',
                           'Printable'),
                       10.w,
+                      // each expense on its own row with the work it belongs to
+                      formatCard('xlsx', Icons.grid_on_outlined, 'Excel',
+                          'Formatted sheet'),
+                      10.w,
                       formatCard('csv', Icons.table_chart_outlined, 'CSV',
-                          'Opens in Excel'),
+                          'Plain text'),
                     ],
                   ),
                 ],
@@ -2524,14 +2480,6 @@ class _AccountsCollectionsScreenState
         },
       ),
     );
-  }
-
-  String _getMonthName(int m) {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    return months[m - 1];
   }
 }
 

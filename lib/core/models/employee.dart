@@ -4,6 +4,9 @@ class Employee {
   final String name;
   final String email;
   final String type;
+
+  /// An outside artist who works events as an ASSOCIATE (always outsource: no login, no payroll, paid per work through Artist Payouts).
+  final bool isAssociate;
   final String artistRole;
   final String specialization;
   final List<String> works;
@@ -65,6 +68,7 @@ class Employee {
     required this.name,
     required this.email,
     required this.type,
+    this.isAssociate = false,
     required this.artistRole,
     required this.specialization,
     this.works = const [],
@@ -140,6 +144,7 @@ class Employee {
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       type: json['type'] as String? ?? 'in-house',
+      isAssociate: json['isAssociate'] == true,
       artistRole: json['artistRole'] as String? ?? 'artist',
       specialization: json['specialization'] as String? ?? '',
       works: ((json['works'] as List?) ?? const [])
@@ -229,6 +234,7 @@ class Employee {
       'name': name,
       'email': email,
       'type': type,
+      if (isAssociate) 'isAssociate': true,
       'artistRole': artistRole,
       'specialization': specialization,
       'works': works,
@@ -287,6 +293,7 @@ class Employee {
     String? name,
     String? email,
     String? type,
+    bool? isAssociate,
     String? artistRole,
     String? specialization,
     List<String>? works,
@@ -342,6 +349,7 @@ class Employee {
       name: name ?? this.name,
       email: email ?? this.email,
       type: type ?? this.type,
+      isAssociate: isAssociate ?? this.isAssociate,
       artistRole: artistRole ?? this.artistRole,
       specialization: specialization ?? this.specialization,
       works: works ?? this.works,

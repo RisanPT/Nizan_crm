@@ -75,6 +75,10 @@ class _CompleteOnboardingDialogState
   String? _reportingManagerId;
   String _currentGrade = 'B';
   String _type = 'in-house';
+
+  /// An outside (outsource) artist who works events as an ASSOCIATE — assigned from the booking's team panel, paid per work, listed in the
+  /// Associate Works report.
+  bool _isAssociate = false;
   String _employmentStatus = 'probation';
   String _status = 'active';
   DateTime? _dateOfJoining;
@@ -247,6 +251,7 @@ class _CompleteOnboardingDialogState
     // Keep the stored contract type exactly (it used to be rewritten on open).
     _type = e?.type ?? 'in-house';
     if (!_typeLabels.containsKey(_type)) _type = 'in-house';
+    _isAssociate = e?.isAssociate ?? false;
     _employmentStatus = e?.employmentStatus ?? 'probation';
     if (!const {'probation', 'confirmed', 'notice_period', 'exited'}.contains(_employmentStatus)) {
       _employmentStatus = 'probation';
@@ -428,6 +433,7 @@ class _CompleteOnboardingDialogState
             dateOfJoining: _dateOfJoining,
             probationEndDate: _probationEndDate,
             type: _type,
+            isAssociate: _type == 'outsource' && _isAssociate,
             artistRole: _artistRoleToSave(),
             specialization: specialization,
             role: title,
@@ -1061,6 +1067,15 @@ class _CompleteOnboardingDialogState
               ),
             ],
           ),
+          if (_type == 'outsource')
+            SwitchListTile(
+              key: const Key('is_associate'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Associate artist'),
+              subtitle: const Text('An outside artist who works events with the team. Paid per work by Accounts; shown in the Associate Works report.'),
+              value: _isAssociate,
+              onChanged: (v) => setState(() => _isAssociate = v),
+            ),
           const SizedBox(height: 16),
           Row(
             children: [

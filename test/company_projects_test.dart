@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
 import 'package:nizan_crm/features/it/domain/task_rights.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_editor.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_departments.dart';
@@ -101,10 +102,16 @@ class _FakeTasks extends ITTaskService {
   final updated = <Map<String, dynamic>>[];
 
   @override
-  Future<void> createTask(Map<String, dynamic> body) async => created.add(body);
+  Future<TaskSaveResult> createTask(Map<String, dynamic> body) async {
+    created.add(body);
+    return const TaskSaveResult();
+  }
 
   @override
-  Future<void> updateTask(String id, Map<String, dynamic> body) async => updated.add(body);
+  Future<TaskSaveResult> updateTask(String id, Map<String, dynamic> body) async {
+    updated.add(body);
+    return const TaskSaveResult();
+  }
 }
 
 AuthSession _session({String employeeId = 'e1'}) =>

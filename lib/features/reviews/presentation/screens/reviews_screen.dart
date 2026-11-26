@@ -15,6 +15,12 @@ import 'package:nizan_crm/core/utils/whatsapp_service.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/reviews/data/review.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
+import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_cases_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
+import 'package:nizan_crm/features/crm/services/crm_service.dart';
 
 const _mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 String _date(DateTime? d) => d == null ? '' : '${d.day} ${_mon[d.month]} ${d.year}';
@@ -1339,6 +1345,7 @@ class _ReviewDetailScreenState extends ConsumerState<ReviewDetailScreen> {
             ],
           ),
         ),
+        if (Access.of(ref.watch(authSessionProvider)).canSeeCrmWork) _ReviewCrmCases(review: r),
       ],
     );
   }
@@ -1455,4 +1462,65 @@ class _ReviewDetailScreenState extends ConsumerState<ReviewDetailScreen> {
 extension _Gap on double {
   Widget get gap => SizedBox(width: this);
   Widget get vgap => SizedBox(height: this);
+}
+
+
+/// The CRM case(s) this review opened (an unhappy client or a follow-up opens one by itself): view it — or, for a flagged review with
+/// none, open one by hand.
+class _ReviewCrmCases extends ConsumerWidget {
+  const _ReviewCrmCases({required this.review});
+  final Review review;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final cases = ref.watch(crmCasesForReviewProvider(review.id));
+    final me = ref.watch(crmMeProvider).value;
+    final flagged = review.complaint || review.followUpRequired;
+    return CrmPanel(
+      key: const Key('reviewCrmCases'),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      radius: 12,
+      child: cases.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
+        data: (list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('CRM case', style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
+            const SizedBox(height: 6),
+            for (final c in list)
+              ListTile(
+                key: Key('reviewCase_${c.id}'),
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(c.isOpen ? Icons.report_problem_outlined : Icons.check_circle_outline, color: c.isOpen ? crm.warning : crm.success),
+                title: Text('${c.caseNumber} · ${c.kindLabel}'),
+                subtitle: Text('${c.statusLabel}${c.ownerName.isEmpty ? ' · not assigned' : ' · ${c.ownerName}'}'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.go('/crm/cases/${c.id}'),
+              ),
+            if (list.isEmpty)
+              Text(flagged ? 'No case yet.' : 'No case — none is needed for a happy client.', style: TextStyle(color: crm.textSecondary)),
+            if (list.isEmpty && flagged && me != null && me.canWrite) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const Key('reviewOpenCase'),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Open a case'),
+                onPressed: () async {
+                  final c = await showCrmNewCaseDialog(context, ref, me: me, initial: {
+                    'kind': review.complaint ? 'complaint' : 'follow_up',
+                    'reviewId': review.id,
+                    'customerName': review.brideName,
+                  });
+                  if (c != null && context.mounted) context.go('/crm/cases/${c.id}');
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

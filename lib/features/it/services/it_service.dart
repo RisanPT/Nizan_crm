@@ -8,6 +8,8 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/data/project_spend.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
+import 'package:nizan_crm/features/it/domain/task_extension.dart' show isoDay;
 
 // ── IT department staff ───────────────────────────────────────────────────────
 /// True when an employee belongs to the IT department. Robust to however the
@@ -170,6 +172,13 @@ class ProjectService {
     return Project.fromJson((res.data as Map).cast<String, dynamic>());
   });
 
+  /// Who is on a project: `{managerId?, members, confirmRemoval?, unassignTasks?}` ("Edit team"; a department lead may change their
+  /// own department's people). Someone with work on it is taken off only once confirmed — see TeamRemovalConflict.
+  Future<Project> saveTeam(String id, Map<String, dynamic> body) => _guard('save the team', () async {
+    final res = await _dio.put('/projects/$id/team', data: body);
+    return Project.fromJson((res.data as Map).cast<String, dynamic>());
+  });
+
   /// A department head accepts or declines the invitation to join a project.
   Future<Project> respondToInvitation(String projectId, String department, {required bool accept}) =>
       _guard(accept ? 'accept the invitation' : 'decline the invitation', () async {
@@ -202,6 +211,14 @@ class ProjectService {
         if (reason.trim().isNotEmpty) 'reason': reason.trim(),
       },
     );
+    return Project.fromJson((res.data as Map).cast<String, dynamic>());
+  });
+
+  /// Asks the finance head for MORE: raises the cost to the new total [amount], with the [reason] (needed once the cost was approved; the
+  /// amount approved stays the limit meanwhile). For someone who knows the total they need but not the breakdown — the plan wizard,
+  /// before it makes many priced tasks at once. A project with a breakdown gets the extra on an "other" line.
+  Future<Project> raiseCost(String id, {required double amount, String reason = ''}) => _guard('ask for a bigger budget', () async {
+    final res = await _dio.post('/projects/$id/cost/raise', data: {'amount': amount, if (reason.trim().isNotEmpty) 'reason': reason.trim()});
     return Project.fromJson((res.data as Map).cast<String, dynamic>());
   });
 
@@ -280,7 +297,18 @@ class ITTaskService {
     return (res.data as List).map((e) => ITTask.fromJson((e as Map).cast<String, dynamic>())).toList();
   });
 
-  Future<void> createTask(Map<String, dynamic> body) => _guard('create the task', () => _dio.post('/it-tasks', data: body));
-  Future<void> updateTask(String id, Map<String, dynamic> body) => _guard('update the task', () => _dio.put('/it-tasks/$id', data: body));
+  /// Saves a task. When its cost took the project over budget, the server refuses (409 TASK_COST_OVER_BUDGET, see [OverBudget]); send
+  /// the same body again with a `budgetIncrease` to ask the finance head for more. The result says whether such a request went out.
+  Future<TaskSaveResult> createTask(Map<String, dynamic> body) =>
+      _guard('create the task', () async => TaskSaveResult.fromResponse((await _dio.post('/it-tasks', data: body)).data));
+  Future<TaskSaveResult> updateTask(String id, Map<String, dynamic> body) =>
+      _guard('update the task', () async => TaskSaveResult.fromResponse((await _dio.put('/it-tasks/$id', data: body)).data));
   Future<void> deleteTask(String id) => _guard('delete the task', () => _dio.delete('/it-tasks/$id'));
+
+  /// Extends a task's due date: a later day and a reason. The server writes it into the task's history for good (who, when, from, to,
+  /// how many days, how late it already was, why), its log and the project's activity, and tells the assignee. Returns the task as it is now.
+  Future<ITTask> extendTask(String id, {required DateTime newDeadline, required String reason}) => _guard('extend the due date', () async {
+    final res = await _dio.post('/it-tasks/$id/extend', data: {'newDeadline': isoDay(newDeadline), 'reason': reason});
+    return ITTask.fromJson((res.data as Map).cast<String, dynamic>());
+  });
 }

@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/models/auth_session.dart';
@@ -16,6 +20,11 @@ import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart'
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 import 'package:nizan_crm/features/accounts/data/artist_expense.dart';
 import 'package:nizan_crm/features/accounts/data/finance_list.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/features/accounts/services/expense_service.dart';
+import 'package:nizan_crm/services/report_service.dart';
+import 'package:nizan_crm/features/finance/data/bank_account.dart';
+import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/presentation/screens/artist_finance_screen.dart';
@@ -24,6 +33,34 @@ import 'package:nizan_crm/services/employee_service.dart';
 // Artist Finance: the Collections and Expenses tabs are filtered, sorted and paged
 // on the server. These tests drive the real screen against a pretend server that
 // records every query it is asked.
+
+/// A report service that only remembers what was asked for (the real one opens a browser).
+class _FakeReports extends ReportService {
+  final calls = <({String format, String? employeeId})>[];
+  _FakeReports() : super(Dio(), 't');
+
+  @override
+  Future<void> downloadFinanceReport({required ReportRange range, String? employeeId, required String format}) async {
+    calls.add((format: format, employeeId: employeeId));
+  }
+}
+
+/// Answers every request with {} and remembers what was asked.
+class _Recorder implements HttpClientAdapter {
+  final List<RequestOptions> calls;
+  _Recorder(this.calls);
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    calls.add(options);
+    return ResponseBody.fromString(jsonEncode({'_id': 'x0', 'amount': 250, 'status': 'verified', 'category': 'food', 'date': '2026-10-12T04:30:00.000Z'}), 200, headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 class _FakeBookingNotifier extends BookingNotifier {
   @override
@@ -58,6 +95,9 @@ class _Server {
   final expQueries = <FinanceQuery>[];
   int collTotal = 45;
   int expTotal = 30;
+
+  /// Replaces the expense rows the server sends (i = the row's index).
+  Map<String, dynamic> Function(int i)? expJson;
 
   /// Called before a page is answered; return a future to hold the answer back,
   /// or throw to make the request fail.
@@ -118,7 +158,7 @@ class _Server {
     final start = (q.page - 1) * q.limit;
     final n = math.max(0, math.min(q.limit, expTotal - start));
     return FinancePage(
-      items: [for (var i = start; i < start + n; i++) ArtistExpense.fromJson(_exp(i, status: i < 4 ? 'pending' : 'verified'))],
+      items: [for (var i = start; i < start + n; i++) ArtistExpense.fromJson((expJson ?? (k) => _exp(k, status: k < 4 ? 'pending' : 'verified'))(i))],
       page: q.page,
       limit: q.limit,
       totalItems: expTotal,
@@ -130,8 +170,9 @@ class _Server {
 
 Employee _employee(String id, String name) => Employee.fromJson({'_id': id, 'name': name, 'artistRole': 'artist', 'status': 'active'});
 
-Widget _app(_Server server, {String role = 'accounts', String employeeId = ''}) => ProviderScope(
+Widget _app(_Server server, {String role = 'accounts', String employeeId = '', List<Override> extra = const []}) => ProviderScope(
       overrides: [
+        ...extra,
         financeCollectionsPageProvider.overrideWith((ref, q) => server.collections(q)),
         financeExpensesPageProvider.overrideWith((ref, q) => server.expenses(q)),
         employeesProvider.overrideWith((ref) async => [_employee('e1', 'Anu'), _employee('e2', 'Fathima')]),
@@ -150,9 +191,9 @@ void _size(WidgetTester t, {double w = 1400, double h = 12000}) {
   addTearDown(t.view.reset);
 }
 
-Future<void> _open(WidgetTester t, _Server server, {String role = 'accounts', String employeeId = '', double w = 1400}) async {
+Future<void> _open(WidgetTester t, _Server server, {String role = 'accounts', String employeeId = '', double w = 1400, List<Override> extra = const []}) async {
   _size(t, w: w);
-  await t.pumpWidget(_app(server, role: role, employeeId: employeeId));
+  await t.pumpWidget(_app(server, role: role, employeeId: employeeId, extra: extra));
   await t.pumpAndSettle();
 }
 
@@ -659,6 +700,92 @@ void main() {
       expect(t.takeException(), isNull);
       expect(find.text('Bridal Work'), findsOneWidget);
       expect(server.expQueries, isNotEmpty);
+    });
+  });
+
+  group('an expense approved for less', () {
+
+    testWidgets('approving a pending expense from the screen opens the popup with its logged amount, and sends the approved one', (t) async {
+      final calls = <RequestOptions>[];
+      final dio = Dio()..httpClientAdapter = _Recorder(calls);
+      final server = _Server()..expTotal = 4; // rows 0-3 are pending
+      await _open(t, server, w: 390, extra: [
+        expenseServiceProvider.overrideWithValue(ExpenseService(dio)),
+        bankAccountsProvider.overrideWith((ref) async => BankAccountsResult(accounts: [
+              BankAccount.fromJson({'_id': 'acc1', 'name': 'Cash in hand', 'kind': 'cash', 'balance': 5000, 'currentBalance': 5000, 'ledger': {'_id': 'l1', 'code': '1000', 'name': 'Cash'}}),
+            ], totalBalance: 5000)),
+      ]);
+      await _openExpenses(t);
+      await t.tap(find.byTooltip('Approve').first);
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('approveAmountBlock')), findsOneWidget, reason: 'an expense can be approved for less');
+      expect(t.widget<Text>(find.byKey(const Key('approveLoggedAmount'))).data, '₹300', reason: 'what the artist logged on row 0');
+      await t.enterText(find.byKey(const Key('approvedAmountField')), '250');
+      await t.pump();
+      await t.tap(find.widgetWithText(FilledButton, 'Approve'));
+      await t.pumpAndSettle();
+      final verify = calls.firstWhere((c) => c.path.endsWith('/verify'));
+      expect(verify.path, '/expenses/x0/verify');
+      expect((verify.data as Map)['status'], 'verified');
+      expect((verify.data as Map)['approvedAmount'], 250);
+      expect((verify.data as Map)['moneyAccountId'], 'acc1');
+    });
+
+    testWidgets('approving a COLLECTION is unchanged: no approved-amount box', (t) async {
+      final server = _Server();
+      await _open(t, server, w: 390, extra: [
+        bankAccountsProvider.overrideWith((ref) async => BankAccountsResult(accounts: [
+              BankAccount.fromJson({'_id': 'acc1', 'name': 'Cash in hand', 'kind': 'cash', 'balance': 5000, 'currentBalance': 5000, 'ledger': {'_id': 'l1', 'code': '1000', 'name': 'Cash'}}),
+            ], totalBalance: 5000)),
+      ]);
+      await t.tap(find.byTooltip('Approve').first);
+      await t.pumpAndSettle();
+      expect(find.text('Approve collection'), findsOneWidget);
+      expect(find.byKey(const Key('approveAmountBlock')), findsNothing);
+    });
+
+    testWidgets('the phone card shows the approved amount, what was logged, and why', (t) async {
+      final server = _Server()
+        ..expTotal = 2
+        ..expJson = (i) => {
+              ..._exp(i),
+              if (i == 0) ...{'amount': 1400.0, 'loggedAmount': 1517.0, 'approvalNote': 'over the meal limit'},
+            };
+      await _open(t, server, w: 390);
+      await _openExpenses(t);
+      expect(find.byKey(const Key('entryCardLogged')), findsOneWidget, reason: 'only the reduced one, not the other');
+      expect(find.text('₹ 1400'), findsOneWidget);
+      expect(find.text('Approved amount · logged ₹ 1517'), findsOneWidget);
+      expect(find.byKey(const Key('entryCardReducedNote')), findsOneWidget);
+      expect(find.text('over the meal limit'), findsOneWidget);
+    });
+  });
+
+  group('the finance report dialog', () {
+    testWidgets('offers PDF, Excel and CSV — and Excel asks the server for an .xlsx', (t) async {
+      final reports = _FakeReports();
+      await _open(t, _Server(), w: 390, extra: [reportServiceProvider.overrideWithValue(reports)]);
+      await t.tap(find.byTooltip('Generate Report'));
+      await t.pumpAndSettle();
+      expect(find.text('PDF'), findsOneWidget);
+      expect(find.text('Excel'), findsOneWidget);
+      expect(find.text('CSV'), findsOneWidget);
+      await t.tap(find.byKey(const Key('reportFormatExcel')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('GENERATE'));
+      await t.pumpAndSettle();
+      expect(reports.calls.single.format, 'xlsx');
+      expect(find.text('✓ Report Generated (EXCEL)'), findsOneWidget);
+    });
+
+    testWidgets('PDF is still the starting choice', (t) async {
+      final reports = _FakeReports();
+      await _open(t, _Server(), w: 390, extra: [reportServiceProvider.overrideWithValue(reports)]);
+      await t.tap(find.byTooltip('Generate Report'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('GENERATE'));
+      await t.pumpAndSettle();
+      expect(reports.calls.single.format, 'pdf');
     });
   });
 }

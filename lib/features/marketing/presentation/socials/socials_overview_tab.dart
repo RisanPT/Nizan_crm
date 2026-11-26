@@ -42,10 +42,10 @@ class SocialsOverviewTab extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               MktKpiRow(children: [
-                kpi('soc_kpi_total', Icons.layers_outlined, 'Total Posts', k.total, 'total', Mkt.violet),
+                kpi('soc_kpi_total', Icons.layers_outlined, 'Total Posts', k.total, 'total', Mkt.primary),
                 kpi('soc_kpi_reels', Icons.play_circle_outline_rounded, 'Reels', k.reels, 'reels', Mkt.pink),
                 kpi('soc_kpi_trial', Icons.science_outlined, 'Trial Reels', k.trialReels, 'trialReels', Mkt.warn),
-                kpi('soc_kpi_stories', Icons.auto_stories_outlined, 'Stories', k.stories, 'stories', Mkt.violet2),
+                kpi('soc_kpi_stories', Icons.auto_stories_outlined, 'Stories', k.stories, 'stories', Mkt.primaryLight),
                 kpi('soc_kpi_feed', Icons.view_carousel_outlined, 'Feed / Carousel', k.feed, 'feed', Mkt.warn),
                 kpi('soc_kpi_collab', Icons.people_alt_outlined, 'Collab Posts', k.collab, 'collab', Mkt.blue),
               ]),
@@ -153,7 +153,7 @@ class _PlatformsCard extends StatelessWidget {
                   key: Key('soc_platform_${p.platform}_${p.brand}'),
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(children: [
-                    Icon(platformIcon(p.platform), size: 16, color: Mkt.violet),
+                    Icon(platformIcon(p.platform), size: 16, color: Mkt.primary),
                     const SizedBox(width: 8),
                     Expanded(child: Text(p.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12))),
                     Text('${p.count}', style: mktText(12.5, weight: FontWeight.w800)),
@@ -191,7 +191,7 @@ class _TrackerCard extends ConsumerWidget {
     return MktCard(
       title: 'Content Activity Tracker',
       icon: Icons.grid_view_rounded,
-      trailing: TextButton(key: const Key('soc_set_targets'), onPressed: () => showSocialsTargets(context, ref), child: Text('Set targets', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.violet))),
+      trailing: TextButton(key: const Key('soc_set_targets'), onPressed: () => showSocialsTargets(context, ref), child: Text('Set targets', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.primary))),
       child: !o.hasMetrics
           ? const MktEmpty('No activities are set up under Socials yet. Add them in Team → EOD → Setup, and they appear here.', icon: Icons.grid_view_rounded, height: 120)
           : MktTable(
@@ -207,7 +207,7 @@ class _TrackerCard extends ConsumerWidget {
                     Text(_n(r.completed), style: mktText(12, weight: FontWeight.w700)),
                     r.progress == null
                         ? Text('No target', style: mktText(11, color: Mkt.inkSoft))
-                        : Padding(padding: const EdgeInsets.only(right: 4), child: MktProgress(pct: r.progress!.clamp(0, 999), color: r.progress! >= 100 ? Mkt.good : (r.progress! >= 60 ? Mkt.violet2 : Mkt.warn), labelWidth: 42)),
+                        : Padding(padding: const EdgeInsets.only(right: 4), child: MktProgress(pct: r.progress!.clamp(0, 999), color: r.progress! >= 100 ? Mkt.good : (r.progress! >= 60 ? Mkt.primaryLight : Mkt.warn), labelWidth: 42)),
                   ],
               ],
             ),
@@ -270,12 +270,15 @@ class _TeamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // a member sees only their own logged work; a manager the whole team's (the server decides — teamScope)
+    final own = o.teamScope == 'own';
     return MktCard(
-      title: 'Team Activities (Socials)',
-      subtitle: o.teamDay.isEmpty ? null : shortDay(o.teamDay),
+      key: const Key('soc_team_card'),
+      title: own ? 'Your Activities (Socials)' : 'Team Activities (Socials)',
+      subtitle: [if (o.teamDay.isNotEmpty) shortDay(o.teamDay), if (own) 'only your own work is shown'].join(' · '),
       icon: Icons.groups_2_outlined,
       child: o.teamActivities.isEmpty
-          ? const MktEmpty('Nothing logged for Socials today.', icon: Icons.edit_note_rounded)
+          ? MktEmpty(own ? 'You have logged nothing for Socials today.' : 'Nothing logged for Socials today.', icon: Icons.edit_note_rounded)
           : MktTable(
               minWidth: 300,
               rowHeight: 44,
@@ -323,9 +326,9 @@ class _EngagementCard extends StatelessWidget {
           ? const MktEmpty('No numbers have been typed on this period\'s posts yet.', icon: Icons.favorite_border_rounded)
           : Row(children: [
               Expanded(child: stat('soc_eng_likes', Icons.favorite_rounded, Mkt.pink, e.likes, 'Likes', e.change['likes'])),
-              Expanded(child: stat('soc_eng_comments', Icons.chat_bubble_outline_rounded, Mkt.violet2, e.comments, 'Comments', e.change['comments'])),
+              Expanded(child: stat('soc_eng_comments', Icons.chat_bubble_outline_rounded, Mkt.primaryLight, e.comments, 'Comments', e.change['comments'])),
               Expanded(child: stat('soc_eng_reposts', Icons.repeat_rounded, Mkt.good, e.reposts, 'Reposts', e.change['reposts'])),
-              Expanded(child: stat('soc_eng_shares', Icons.send_outlined, Mkt.violet, e.shares, 'Shares', e.change['shares'])),
+              Expanded(child: stat('soc_eng_shares', Icons.send_outlined, Mkt.primary, e.shares, 'Shares', e.change['shares'])),
               Expanded(child: stat('soc_eng_saves', Icons.bookmark_border_rounded, Mkt.warn, e.saves, 'Saves', e.change['saves'])),
             ]),
     );
@@ -427,7 +430,7 @@ class _FocusCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(child: Text(f.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(12, color: f.done ? Mkt.inkSoft : Mkt.ink))),
                     const SizedBox(width: 8),
-                    SizedBox(width: 90, child: MktProgress(pct: f.done ? 100 : f.progress, color: Mkt.violet2, labelWidth: 34)),
+                    SizedBox(width: 90, child: MktProgress(pct: f.done ? 100 : f.progress, color: Mkt.primaryLight, labelWidth: 34)),
                   ]),
                 ),
             ]),

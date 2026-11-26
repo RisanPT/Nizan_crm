@@ -11,6 +11,13 @@ class ClientConversation {
   final int unreadForStaff;
   final int unreadForClient;
 
+  /// Who on the team holds the chat (the first to answer, or whom the CRM Head gave it to) — null when nobody does.
+  final String? assignedStaffId;
+  final String assignedStaffName;
+
+  /// Since when the client has been waiting for an answer (null when nobody is waiting).
+  final DateTime? awaitingSince;
+
   const ClientConversation({
     required this.id,
     this.clientName = '',
@@ -21,6 +28,9 @@ class ClientConversation {
     this.lastMessageSenderType = '',
     this.unreadForStaff = 0,
     this.unreadForClient = 0,
+    this.assignedStaffId,
+    this.assignedStaffName = '',
+    this.awaitingSince,
   });
 
   factory ClientConversation.fromJson(Map<String, dynamic> j) =>
@@ -36,6 +46,9 @@ class ClientConversation {
             (j['lastMessageSenderType'] ?? '').toString(),
         unreadForStaff: (j['unreadForStaff'] as num?)?.toInt() ?? 0,
         unreadForClient: (j['unreadForClient'] as num?)?.toInt() ?? 0,
+        assignedStaffId: (j['assignedStaffId'] ?? '').toString().isEmpty ? null : j['assignedStaffId'].toString(),
+        assignedStaffName: (j['assignedStaffName'] ?? '').toString(),
+        awaitingSince: DateTime.tryParse((j['awaitingSince'] ?? '').toString())?.toLocal(),
       );
 
   /// A friendly label when the client hasn't shared a name yet.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
@@ -8,8 +9,10 @@ import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart' show TeamRefusal;
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_widgets.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/shoot_board.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/shoot_editor.dart';
 import 'package:nizan_crm/features/marketing/presentation/socials/asset_editor.dart';
+import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart' show platformName, postFormatLabel, postStatusLabel;
 import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 
@@ -36,7 +39,7 @@ class ShootPlannerTab extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               MktKpiRow(minWidth: 180, children: [
-                MktKpiCard(key: const Key('pf_kpi_planned'), icon: Icons.track_changes_rounded, value: '${c.planned}', label: 'Planned Shoots', tint: Mkt.violet),
+                MktKpiCard(key: const Key('pf_kpi_planned'), icon: Icons.track_changes_rounded, value: '${c.planned}', label: 'Planned Shoots', tint: Mkt.primary),
                 MktKpiCard(key: const Key('pf_kpi_production'), icon: Icons.videocam_outlined, value: '${c.inProduction}', label: 'In Production', tint: Mkt.good),
                 MktKpiCard(key: const Key('pf_kpi_post'), icon: Icons.edit_outlined, value: '${c.postProduction}', label: 'In Post-production', tint: Mkt.warn),
                 MktKpiCard(key: const Key('pf_kpi_completed'), icon: Icons.check_circle_outline_rounded, value: '${c.completed}', label: 'Completed', tint: Mkt.blue),
@@ -84,14 +87,14 @@ class _ListCardState extends ConsumerState<_ListCard> {
     return MktCard(
       title: 'Shoot Plans',
       icon: Icons.video_library_outlined,
-      trailing: TextButton(key: const Key('pf_new_plan_inline'), onPressed: () => showShootEditor(context, ref), child: Text('+ New Plan', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.violet))),
+      trailing: TextButton(key: const Key('pf_new_plan_inline'), onPressed: () => showShootEditor(context, ref), child: Text('+ New Plan', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.primary))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         TextField(
           key: const Key('pf_search'),
           controller: _search,
           onChanged: (v) => _set(PlannerQuery(status: q.status, q: v)),
           style: mktText(13),
-          decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, size: 18), hintText: 'Search shoot plan…', isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 10), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.violet))),
+          decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, size: 18), hintText: 'Search shoot plan…', isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 10), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.primary))),
         ),
         const SizedBox(height: 8),
         SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
@@ -107,7 +110,7 @@ class _ListCardState extends ConsumerState<_ListCard> {
             child: Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: s.id == widget.openId ? Mkt.violetSoft : Mkt.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: s.id == widget.openId ? Mkt.violet : Mkt.border)),
+              decoration: BoxDecoration(color: s.id == widget.openId ? Mkt.primarySoft : Mkt.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: s.id == widget.openId ? Mkt.primary : Mkt.border)),
               child: Row(children: [
                 ShootCover(url: s.coverUrl, size: 46),
                 const SizedBox(width: 10),
@@ -136,9 +139,11 @@ class _ListCardState extends ConsumerState<_ListCard> {
   }
 }
 
-enum _Part { brief, moodboard, plan, crew, approvals }
+// the order of the views on a shoot (Content Plan comes right after the Brief)
+enum _Part { brief, plan, moodboard, storyboard, camera, crew, approvals }
 
-/// The open shoot: header with its status, five views (Brief, Moodboard, Content Plan, Crew & Logistics, Approvals), milestones and progress.
+/// The open shoot: header with its status, seven views (Brief, Content Plan, Moodboard, Storyboard, Camera Movement, Crew & Logistics, Approvals), milestones
+/// and progress.
 class ShootDetailCard extends ConsumerStatefulWidget {
   const ShootDetailCard({super.key, required this.id});
   final String id;
@@ -150,7 +155,7 @@ class ShootDetailCard extends ConsumerStatefulWidget {
 class _ShootDetailCardState extends ConsumerState<ShootDetailCard> {
   _Part _part = _Part.brief;
 
-  static const _labels = {_Part.brief: 'Brief', _Part.moodboard: 'Moodboard', _Part.plan: 'Content Plan', _Part.crew: 'Crew & Logistics', _Part.approvals: 'Approvals'};
+  static const _labels = {_Part.brief: 'Brief', _Part.plan: 'Content Plan', _Part.moodboard: 'Moodboard', _Part.storyboard: 'Storyboard', _Part.camera: 'Camera Movement', _Part.crew: 'Crew & Logistics', _Part.approvals: 'Approvals'};
 
   Future<void> _setStatus(ShootDetail d, String status) async {
     try {
@@ -210,15 +215,19 @@ class _ShootDetailCardState extends ConsumerState<ShootDetailCard> {
               if (s.time.isNotEmpty) _fact(Icons.schedule_rounded, s.time),
               if (s.location.isNotEmpty) _fact(Icons.place_outlined, s.location),
               _fact(Icons.groups_2_outlined, '${s.crewCount} crew'),
+              if (d.booking != null) KeyedSubtree(key: const Key('pf_booking'), child: _fact(Icons.event_note_outlined, 'Work: ${d.booking!.label}${d.booking!.eventDate == null ? '' : ' (${shootDay(d.booking!.eventDate!, pattern: 'd MMM')})'}')),
               if (s.rescheduleCount > 0) _fact(Icons.update_rounded, 'Rescheduled ${s.rescheduleCount}×'),
               if (s.delayed) const MktChip('Delayed', color: Mkt.bad),
             ]),
             const SizedBox(height: 10),
-            SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final p in _Part.values) Padding(padding: const EdgeInsets.only(right: 6), child: MktFilterChip(key: Key('pf_part_${p.name}'), label: _labels[p]!, selected: _part == p, onTap: () => setState(() => _part = p)))])),
+            // every view stays in sight: the chips wrap onto a second line rather than scroll away
+            Wrap(spacing: 6, runSpacing: 6, children: [for (final p in _Part.values) MktFilterChip(key: Key('pf_part_${p.name}'), label: _labels[p]!, selected: _part == p, onTap: () => setState(() => _part = p))]),
             const SizedBox(height: 10),
             switch (_part) {
-              _Part.brief => _Brief(d: d),
-              _Part.moodboard => _Moodboard(d: d),
+              _Part.brief => _Brief(d: d, onMoodboard: () => setState(() => _part = _Part.moodboard)),
+              _Part.moodboard => ShootMoodboard(detail: d),
+              _Part.storyboard => ShootStoryboard(detail: d),
+              _Part.camera => ShootCameraMovement(detail: d),
               _Part.plan => _Plan(d: d),
               _Part.crew => _Crew(d: d),
               _Part.approvals => _Approvals(d: d),
@@ -235,8 +244,9 @@ class _ShootDetailCardState extends ConsumerState<ShootDetailCard> {
 }
 
 class _Brief extends StatelessWidget {
-  const _Brief({required this.d});
+  const _Brief({required this.d, required this.onMoodboard});
   final ShootDetail d;
+  final VoidCallback onMoodboard;
 
   @override
   Widget build(BuildContext context) {
@@ -258,31 +268,12 @@ class _Brief extends StatelessWidget {
         const SizedBox(height: 6),
         Text('Outputs (Planned)', style: mktText(11.5, color: Mkt.inkSoft)),
         const SizedBox(height: 4),
-        planned.isEmpty ? Text('None planned', style: mktText(11.5, color: Mkt.inkSoft)) : Wrap(spacing: 6, runSpacing: 6, children: [for (final p in planned) MktChip(p, color: Mkt.violet)]),
+        planned.isEmpty ? Text('None planned', style: mktText(11.5, color: Mkt.inkSoft)) : Wrap(spacing: 6, runSpacing: 6, children: [for (final p in planned) MktChip(p, color: Mkt.primary)]),
+        const SizedBox(height: 12),
+        // the moodboard at a glance, as the document's Brief shows it
+        MoodboardPreview(detail: d, onViewAll: onMoodboard),
       ]),
     );
-  }
-}
-
-class _Moodboard extends StatelessWidget {
-  const _Moodboard({required this.d});
-  final ShootDetail d;
-
-  @override
-  Widget build(BuildContext context) {
-    if (d.references.isEmpty) return const MktEmpty('No reference links yet — add them in Edit plan.', icon: Icons.photo_library_outlined, height: 110);
-    return Column(key: const Key('pf_moodboard'), children: [
-      for (final r in d.references)
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.link_rounded, color: Mkt.violet),
-          title: Text(r.label.isEmpty ? r.url : r.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700)),
-          subtitle: r.label.isEmpty ? null : Text(r.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, color: Mkt.inkSoft)),
-          trailing: const Icon(Icons.open_in_new_rounded, size: 16),
-          onTap: () => launchUrl(Uri.parse(r.url), mode: LaunchMode.externalApplication),
-        ),
-    ]);
   }
 }
 
@@ -301,21 +292,27 @@ class _Plan extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(children: [
               SizedBox(width: 110, child: Text(r.$1, style: mktText(12.5))),
-              Expanded(child: MktProgress(pct: r.$2 == 0 ? 100 : (r.$3 * 100 / r.$2).round().clamp(0, 100), color: r.$3 >= r.$2 ? Mkt.good : Mkt.violet2, labelWidth: 0, showLabel: false)),
+              Expanded(child: MktProgress(pct: r.$2 == 0 ? 100 : (r.$3 * 100 / r.$2).round().clamp(0, 100), color: r.$3 >= r.$2 ? Mkt.good : Mkt.primaryLight, labelWidth: 0, showLabel: false)),
               const SizedBox(width: 10),
               Text('${r.$3} / ${r.$2}', style: mktText(12, weight: FontWeight.w800)),
             ]),
           ),
       const SizedBox(height: 6),
-      Text('Delivered = an asset attached to this shoot that is Approved or marked Final.', style: mktText(11, color: Mkt.inkSoft)),
+      Text('Delivered = an asset attached to this shoot that is Approved or marked Final, or a post from it that went out (counted once).', style: mktText(11, color: Mkt.inkSoft)),
       const SizedBox(height: 8),
       Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(key: const Key('pf_add_asset'), onPressed: () => showAssetEditor(context, ref, shootId: s.id, brand: s.brand), icon: const Icon(Icons.add_rounded, size: 16), label: const Text('Add asset to this shoot'))),
       if (d.assets.isNotEmpty) ...[
         const SizedBox(height: 10),
         Text('Assets (${d.assets.length})', style: mktText(12.5, weight: FontWeight.w800)),
         for (final a in d.assets.take(8))
-          ListTile(key: Key('pf_asset_${a.id}'), dense: true, contentPadding: EdgeInsets.zero, leading: Icon(a.media == 'video' ? Icons.play_circle_outline_rounded : Icons.image_outlined, color: Mkt.violet), title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w600)), subtitle: Text(assetKindLabel(a.kind), style: mktText(10.5, color: Mkt.inkSoft)), trailing: MktChip(assetStageLabel(a.stage), color: a.stage == 'approved' ? Mkt.good : Mkt.grey), onTap: () => launchUrl(Uri.parse(a.url), mode: LaunchMode.externalApplication)),
+          ListTile(key: Key('pf_asset_${a.id}'), dense: true, contentPadding: EdgeInsets.zero, leading: Icon(a.media == 'video' ? Icons.play_circle_outline_rounded : Icons.image_outlined, color: Mkt.primary), title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w600)), subtitle: Text(assetKindLabel(a.kind), style: mktText(10.5, color: Mkt.inkSoft)), trailing: MktChip(assetStageLabel(a.stage), color: a.stage == 'approved' ? Mkt.good : Mkt.grey), onTap: () => launchUrl(Uri.parse(a.url), mode: LaunchMode.externalApplication)),
       ],
+      if (d.posts.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Text('Posts (${d.posts.length})', style: mktText(12.5, weight: FontWeight.w800)),
+        for (final p in d.posts.take(8)) ShootPostTile(post: p),
+      ],
+      ShootFootageList(detail: d),
     ]);
   }
 }
@@ -326,16 +323,13 @@ class _Crew extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = d.summary;
     return Column(key: const Key('pf_crew'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(spacing: 14, children: [
-        Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.place_outlined, size: 15, color: Mkt.inkSoft), const SizedBox(width: 5), Text(s.location.isEmpty ? 'No location' : s.location, style: mktText(12.5))]),
-        Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.schedule_rounded, size: 15, color: Mkt.inkSoft), const SizedBox(width: 5), Text(s.time.isEmpty ? 'No time set' : s.time, style: mktText(12.5))]),
-      ]),
-      const SizedBox(height: 8),
-      if (d.crew.isEmpty) const MktEmpty('No crew assigned yet.', icon: Icons.groups_2_outlined, height: 80) else
+      Text('Crew', style: mktText(12.5, weight: FontWeight.w800)),
+      if (d.crew.isEmpty) const MktEmpty('No crew assigned yet — choose them in Edit plan.', icon: Icons.groups_2_outlined, height: 80) else
         for (final c in d.crew)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [MktAvatar(c.name, size: 28), const SizedBox(width: 10), Expanded(child: Text(c.name, style: mktText(12.5, weight: FontWeight.w700))), if (c.role.isNotEmpty) MktChip(c.role, color: Mkt.violet)])),
+          Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [MktAvatar(c.name, size: 28), const SizedBox(width: 10), Expanded(child: Text(c.name, style: mktText(12.5, weight: FontWeight.w700))), if (c.role.isNotEmpty) MktChip(c.role, color: Mkt.primary)])),
+      const SizedBox(height: 10),
+      ShootLogisticsCard(detail: d),
     ]);
   }
 }
@@ -392,13 +386,35 @@ class _Progress extends StatelessWidget {
           MilestoneStepper(milestones: d.milestones, current: d.currentMilestone),
           if (d.activity.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text('Moves when work is logged against this shoot:', style: mktText(10.5, color: Mkt.inkSoft)),
+            Text(d.activityScope == 'own' ? 'Moves when work is logged against this shoot (your own entries):' : 'Moves when work is logged against this shoot:', style: mktText(10.5, color: Mkt.inkSoft)),
             for (final l in d.activity.take(3)) Text('• ${l.member.isEmpty ? '' : '${l.member}: '}${l.workedOn}${l.stage.isEmpty ? '' : ' (${kMilestoneLabels[l.stage] ?? l.stage})'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, color: Mkt.inkSoft)),
           ],
         ])),
         const SizedBox(width: 14),
         ProgressRing(pct: d.summary.progress),
       ]),
+    );
+  }
+}
+
+/// A post linked to a shoot: title, platform · format, its stage and the day it went out (or is planned for).
+class ShootPostTile extends StatelessWidget {
+  const ShootPostTile({super.key, required this.post});
+  final ShootPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final out = post.status == 'published';
+    final day = out ? post.publishedDate : post.scheduledDate;
+    return ListTile(
+      key: Key('pf_post_${post.id}'),
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(out ? Icons.check_circle_outline_rounded : Icons.schedule_send_outlined, color: out ? Mkt.good : Mkt.inkSoft),
+      title: Text(post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w600)),
+      subtitle: Text([platformName(post.platform), postFormatLabel(post.contentType), if (day != null) DateFormat('d MMM yyyy').format(day)].join(' · '), style: mktText(10.5, color: Mkt.inkSoft)),
+      trailing: MktChip(out ? 'Posted' : postStatusLabel(post.status), color: out ? Mkt.good : Mkt.grey),
+      onTap: post.permalink.isEmpty ? null : () => launchUrl(Uri.parse(post.permalink), mode: LaunchMode.externalApplication),
     );
   }
 }

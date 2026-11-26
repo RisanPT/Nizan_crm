@@ -2,11 +2,16 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/features/sales/data/goal_report.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 
-/// (granularity day|week|month, anchor day yyyy-MM-dd, basis added|event)
+/// (granularity day|week|month, anchor day yyyy-MM-dd, basis added|event). Any stretch of days instead: granularity 'range' and the
+/// date 'from..to' — build it with [goalRangeQuery].
 typedef GoalQuery = ({String granularity, String date, String basis});
+
+/// The report for the days in [range] (both ends needed, at most a year — the server says so otherwise).
+GoalQuery goalRangeQuery(ReportRange range, String basis) => (granularity: 'range', date: '${range.fromIso}..${range.toIso}', basis: basis);
 
 class GoalService {
   final Dio _dio;
@@ -16,8 +21,11 @@ class GoalService {
 
   Future<GoalReport> getReport(GoalQuery q) async {
     try {
+      final days = q.granularity == 'range' ? q.date.split('..') : const <String>[];
       final res = await _dio.get('/goals/report',
-          queryParameters: {'granularity': q.granularity, 'date': q.date, 'basis': q.basis});
+          queryParameters: days.length == 2
+              ? {'from': days[0], 'to': days[1], 'basis': q.basis}
+              : {'granularity': q.granularity, 'date': q.date, 'basis': q.basis});
       return GoalReport.fromJson(_map(res.data));
     } catch (e) {
       throw AppException(e, action: 'load the report');
@@ -26,7 +34,9 @@ class GoalService {
 
   Future<MtdReport> getMtd(GoalQuery q) async {
     try {
-      final res = await _dio.get('/goals/mtd', queryParameters: {'date': q.date, 'basis': q.basis});
+      // month to date as of the last day of a chosen stretch
+      final asOf = q.granularity == 'range' ? q.date.split('..').last : q.date;
+      final res = await _dio.get('/goals/mtd', queryParameters: {'date': asOf, 'basis': q.basis});
       return MtdReport.fromJson(_map(res.data));
     } catch (e) {
       throw AppException(e, action: 'load month-to-date');

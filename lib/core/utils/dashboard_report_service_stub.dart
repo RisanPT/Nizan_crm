@@ -29,6 +29,8 @@ Future<void> downloadLeadsReport({
   String sourceFilter = 'All',
   String searchQuery = '',
   List<CrmUser> users = const [],
+  String? periodLabel,
+  String? fileTag,
 }) async {
   throw UnsupportedError('Leads PDF export is only available on web.');
 }

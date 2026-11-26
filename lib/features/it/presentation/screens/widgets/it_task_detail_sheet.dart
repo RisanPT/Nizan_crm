@@ -10,10 +10,12 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/features/it/domain/markdown_edit.dart';
+import 'package:nizan_crm/features/it/domain/task_extension.dart';
 import 'package:nizan_crm/features/it/domain/task_rights.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_common.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/task_extension_widgets.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
 /// Opens a task: its details, subtasks, dependencies and discussion. A dialog on a desktop, a sheet on a phone.
@@ -79,6 +81,9 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   late String _assigneeName;
   late DateTime? _startDate;
   late DateTime? _dueDate;
+
+  /// The due date as the server has it: what a picked date is compared with (it moves when the due date is extended from here).
+  late DateTime? _savedDue;
   late int _percentComplete;
   late List<String> _predecessorIds;
 
@@ -107,6 +112,7 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
     _assigneeName = widget.task.assigneeName;
     _startDate = widget.task.startDate;
     _dueDate = widget.task.dueDate;
+    _savedDue = widget.task.dueDate;
     _percentComplete = widget.task.percentComplete;
     _predecessorIds = List.from(widget.task.predecessorIds);
 
@@ -147,7 +153,41 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   /// A predecessor that is not finished and ends after this task is meant to start.
   bool _isBlocking(ITTaskModel pred) => !pred.isCompleted && _startDate != null && pred.dueDate != null && pred.dueDate!.isAfter(_startDate!);
 
+  /// Extends the due date: asks for the new day and the reason; the server writes it into the task's history, its log and the
+  /// project's activity, and tells the assignee.
+  Future<void> _extend() async {
+    final live = _liveTask();
+    if (live.dueDate == null) return;
+    final project = ref.read(projectByIdProvider(widget.task.projectId));
+    final request = await showExtendDeadlineDialog(context, task: live.copyWith(dueDate: _savedDue), projectEnd: project?.endDate);
+    if (request == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(itTaskServiceProvider).extendTask(widget.task.id, newDeadline: request.newDeadline, reason: request.reason);
+      refreshAllItTaskViews(ref);
+      ref.invalidate(projectsProvider);
+      if (mounted) {
+        setState(() {
+          _dueDate = request.newDeadline;
+          _savedDue = request.newDeadline;
+        });
+      }
+      messenger.showSnackBar(SnackBar(content: Text('Due date extended to ${longDay(request.newDeadline)}.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+
   Future<void> _saveChanges() async {
+    // Moving the due date of a LATE task later is an extension, however it is done: say why (the server keeps it in the task's history).
+    String? extensionReason;
+    if (!_rights.progressOnly && _rights.plan && _dueDate != null && _savedDue != null && daysBetween(_dueDate!, _savedDue!) > 0) {
+      final late = taskOverdueDays(due: _savedDue, done: widget.task.isCompleted, now: DateTime.now());
+      if (late > 0) {
+        extensionReason = await askExtensionReason(context, from: _savedDue!, to: _dueDate!, overdueDays: late);
+        if (extensionReason == null || !mounted) return;
+      }
+    }
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -183,6 +223,7 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
               'actualHours': double.tryParse(_actHoursController.text.trim()) ?? 0,
               'percentComplete': _percentComplete,
               'predecessorIds': _predecessorIds,
+              'extensionReason': ?extensionReason,
             };
 
       await notifier.updateTaskField(widget.task.id, updates);
@@ -798,6 +839,14 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
           _row2(
             _dateField(crm, const Key('task_start'), 'Start Date', _startDate, (d) => setState(() => _startDate = d)),
             _dateField(crm, const Key('task_due'), 'Due Date', _dueDate, (d) => setState(() => _dueDate = d), fallback: _startDate),
+          ),
+          // how late it is, how many times its time was extended, and the button to extend it
+          DueDateStatus(
+            task: _liveTask().copyWith(dueDate: _savedDue),
+            now: DateTime.now(),
+            canExtend: _rights.plan,
+            onExtend: _extend,
+            onHistory: () => _tabController.animateTo(3),
           ),
           const SizedBox(height: 14),
           _row2(
@@ -1471,7 +1520,12 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   // ── activity ──────────────────────────────────────────────────────────────
 
   Widget _buildActivityTab(CrmTheme crm, ITTaskModel live) {
-    final logs = live.activityLogs;
+    // the extensions have their own card (the whole history, from the task's record); their lines are not repeated among the comments
+    final logs = [
+      for (final l in live.activityLogs)
+        if (l.type != 'extension') l,
+    ];
+    final hasHistory = live.extensionCount > 0;
     final notifier = getITTasksNotifier(ref, widget.task.projectId);
 
     return Padding(
@@ -1521,15 +1575,16 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
             ),
             const SizedBox(height: 14),
             Expanded(
-              child: logs.isEmpty
+              child: (logs.isEmpty && !hasHistory)
                   ? Center(
                       child: Text('No activity or comments yet.', style: TextStyle(color: crm.textSecondary, fontSize: 13.5)),
                     )
                   : ListView.separated(
-                      itemCount: logs.length,
+                      itemCount: logs.length + (hasHistory ? 1 : 0),
                       separatorBuilder: (_, idx) => const SizedBox(height: 10),
                       itemBuilder: (_, i) {
-                        final log = logs[i];
+                        if (hasHistory && i == 0) return ExtensionHistory(task: live);
+                        final log = logs[i - (hasHistory ? 1 : 0)];
                         return Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(

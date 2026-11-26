@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/core/models/auth_session.dart';
 import 'package:nizan_crm/core/models/crm_user.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -240,7 +241,7 @@ class _FakeMarketingService extends MarketingEodService {
       ];
 }
 
-Future<void> _pumpMarketing(WidgetTester tester, Size size) async {
+Future<void> _pumpMarketing(WidgetTester tester, Size size, {String initialTab = ''}) async {
   SharedPreferences.setMockInitialValues({});
   await _setSize(tester, size);
   await tester.pumpWidget(
@@ -256,7 +257,7 @@ Future<void> _pumpMarketing(WidgetTester tester, Size size) async {
         marketingTeamSummaryProvider.overrideWith((ref, m) async => _team()),
         marketingMissedEodsProvider.overrideWith((ref, m) async => _missed()),
       ],
-      child: MaterialApp(theme: AppTheme.lightTheme, home: const MarketingEodScreen()),
+      child: MaterialApp(theme: AppTheme.lightTheme, home: MarketingEodScreen(initialTab: initialTab)),
     ),
   );
   await tester.pumpAndSettle();
@@ -408,6 +409,17 @@ Future<void> _pumpSalesEod(WidgetTester tester, Size size) async {
 }
 
 void main() {
+  testWidgets('a link with ?tab=setup (the sidebar\'s Setup) opens on Setup', (tester) async {
+    await _pumpMarketing(tester, _desktop, initialTab: 'setup');
+    expect(tester.widget<TabBarView>(find.byType(TabBarView).first).controller!.index, 6, reason: 'Setup is the seventh tab');
+    expect(tester.widget<MktTabPills>(find.byType(MktTabPills)).selected, 'setup');
+  });
+
+  testWidgets('an unknown ?tab= opens on the first tab', (tester) async {
+    await _pumpMarketing(tester, _desktop, initialTab: 'nope');
+    expect(tester.widget<TabBarView>(find.byType(TabBarView).first).controller!.index, 0);
+  });
+
   for (final (label, size) in [('desktop 1440', _desktop), ('phone 390', _phone)]) {
     group(label, () {
       testWidgets('marketing EOD: every tab lays out without overflow', (tester) async {

@@ -7,13 +7,15 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/socials/socials_performance_tab.dart' show growthText, growthColor;
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 
 enum _Part { summary, content, growth }
 
-/// Socials → Reports & Insights: the period's summary with growth, what the numbers say (insights), content analysis by platform and
-/// format, and the month-by-month growth. Export downloads the platform table and insights as a CSV. (Audience demographics are not in
+/// Socials → Reports & Insights: the period's summary with growth, what the numbers say (insights) and what to do next (plain rules on
+/// the figures), content analysis by platform (with each platform's growth on the period before) and format, and the month-by-month
+/// growth. Export downloads the platform table, the months, the insights and the next actions as a CSV. (Audience demographics are not in
 /// the posts' numbers, so there is no Audience view — it needs the platforms' own audience reports.)
 class SocialsReportsTab extends ConsumerStatefulWidget {
   const SocialsReportsTab({super.key});
@@ -56,16 +58,33 @@ class _SocialsReportsTabState extends ConsumerState<SocialsReportsTab> {
     );
   }
 
-  void _export(SocialsReports r) => downloadCsv('socials-report.csv', [
-        ['Platform', 'Posts', 'Reach', 'Impressions', 'Engagements', 'Engagement rate %'],
-        for (final p in r.platforms) [p.label, p.posts, p.reach, p.impressions, p.engagements, p.er ?? ''],
-        [],
-        ['Month', 'Posts', 'Reach', 'Impressions', 'Engagements'],
-        for (final m in r.growthTrend) [m.month, m.posts, m.reach, m.impressions, m.engagements],
-        [],
-        ['Insights'],
-        for (final i in r.insights) [i],
-      ]);
+  Future<void> _export(SocialsReports r) async {
+    try {
+      await downloadCsv('socials-report.csv', reportsCsvRows(r));
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+}
+
+/// The Reports & Insights CSV: platforms with their growth, the months, the insights and the next actions. Unknown figures stay empty.
+List<List<Object?>> reportsCsvRows(SocialsReports r) {
+  String ch(int? c) => c == null ? '' : '$c';
+  return [
+    ['Socials report', r.from, r.to],
+    [],
+    ['Platform', 'Posts', 'Reach', 'Impressions', 'Engagements', 'Engagement rate %', 'Posts growth %', 'Reach growth %', 'Engagements growth %'],
+    for (final p in r.platforms) [p.label, p.posts, p.reach, p.impressions, p.engagements, p.er ?? '', ch(p.change['posts']), ch(p.change['reach']), ch(p.change['engagements'])],
+    [],
+    ['Month', 'Posts', 'Reach', 'Impressions', 'Engagements'],
+    for (final m in r.growthTrend) [m.month, m.posts, m.reach, m.impressions, m.engagements],
+    [],
+    ['Insights'],
+    for (final i in r.insights) [i],
+    [],
+    ['Next actions'],
+    for (final a in r.nextActions) [a],
+  ];
 }
 
 class _Summary extends StatelessWidget {
@@ -110,7 +129,7 @@ class _Summary extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: Column(children: [
-                  row('soc_report_reach', Mkt.violet2, 'Reach', r.reach),
+                  row('soc_report_reach', Mkt.primaryLight, 'Reach', r.reach),
                   row('soc_report_impr', Mkt.blue, 'Impressions', r.impressions),
                   row('soc_report_eng', Mkt.pink, 'Engagements', r.engagements),
                   row('soc_report_followers', Mkt.good, 'Followers', r.followers),
@@ -140,13 +159,13 @@ class _Summary extends StatelessWidget {
                       leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 44, getTitlesWidget: (v, m) => v == m.max ? const SizedBox.shrink() : Text(compactCount(v), style: mktText(9.5, color: Mkt.inkSoft)))),
                       bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, getTitlesWidget: (v, _) => Padding(padding: const EdgeInsets.only(top: 6), child: Text(DateFormat('MMM').format(DateTime.parse('${r.growthTrend[v.toInt()].month}-01')), style: mktText(10, color: Mkt.inkSoft))))),
                     ),
-                    barGroups: [for (var i = 0; i < r.growthTrend.length; i++) BarChartGroupData(x: i, barRods: [BarChartRodData(toY: r.growthTrend[i].reach.toDouble(), color: Mkt.violet2, width: 22, borderRadius: const BorderRadius.vertical(top: Radius.circular(5)))])],
+                    barGroups: [for (var i = 0; i < r.growthTrend.length; i++) BarChartGroupData(x: i, barRods: [BarChartRodData(toY: r.growthTrend[i].reach.toDouble(), color: Mkt.primaryLight, width: 22, borderRadius: const BorderRadius.vertical(top: Radius.circular(5)))])],
                   )),
                 ),
         )),
       ],
       [
-        (12, MktCard(
+        (6, MktCard(
           title: 'Key Insights',
           icon: Icons.lightbulb_outline_rounded,
           child: r.insights.isEmpty
@@ -156,8 +175,28 @@ class _Summary extends StatelessWidget {
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 3),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(color: Mkt.tint(Mkt.violet, 0.06), borderRadius: BorderRadius.circular(10)),
-                      child: Row(children: [const Icon(Icons.auto_awesome_rounded, size: 15, color: Mkt.violet), const SizedBox(width: 8), Expanded(child: Text(line, style: mktText(12.5)))]),
+                      decoration: BoxDecoration(color: Mkt.tint(Mkt.primary, 0.06), borderRadius: BorderRadius.circular(10)),
+                      child: Row(children: [const Icon(Icons.auto_awesome_rounded, size: 15, color: Mkt.primary), const SizedBox(width: 8), Expanded(child: Text(line, style: mktText(12.5)))]),
+                    ),
+                ]),
+        )),
+        (6, MktCard(
+          title: 'Next Actions',
+          subtitle: 'From this period\'s figures',
+          icon: Icons.checklist_rounded,
+          child: r.nextActions.isEmpty
+              ? const MktEmpty('Nothing needs doing — the period\'s figures raise no action.', icon: Icons.check_circle_outline_rounded, height: 90)
+              : Column(key: const Key('soc_report_next'), children: [
+                  for (final (i, line) in r.nextActions.indexed)
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(border: Border.all(color: Mkt.border), borderRadius: BorderRadius.circular(10)),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Container(width: 20, height: 20, alignment: Alignment.center, decoration: const BoxDecoration(color: Mkt.primary, shape: BoxShape.circle), child: Text('${i + 1}', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white))),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(line, style: mktText(12.5))),
+                      ]),
                     ),
                 ]),
         )),
@@ -181,7 +220,7 @@ class _Content extends StatelessWidget {
           title: 'Posts by Format',
           icon: Icons.layers_outlined,
           child: Column(children: [
-            for (final row in [('Reels', k.reels, Mkt.pink), ('Trial Reels', k.trialReels, Mkt.warn), ('Stories', k.stories, Mkt.violet2), ('Feed / Carousel', k.feed, Mkt.blue), ('Collab Posts', k.collab, Mkt.teal)])
+            for (final row in [('Reels', k.reels, Mkt.pink), ('Trial Reels', k.trialReels, Mkt.warn), ('Stories', k.stories, Mkt.primaryLight), ('Feed / Carousel', k.feed, Mkt.blue), ('Collab Posts', k.collab, Mkt.teal)])
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(children: [
@@ -199,10 +238,21 @@ class _Content extends StatelessWidget {
           child: r.platforms.isEmpty
               ? const MktEmpty('No post went out in this period.', icon: Icons.bar_chart_rounded, height: 110)
               : MktTable(
-                  minWidth: 420,
+                  minWidth: 520,
                   rowHeight: 40,
-                  columns: const [MktCol('Platform', flex: 3), MktCol('Posts', width: 48, align: Alignment.center), MktCol('Reach', flex: 2), MktCol('Engagements', flex: 2), MktCol('ER', width: 52, align: Alignment.centerRight)],
-                  rows: [for (final p in r.platforms) [Text(p.label, style: mktText(12, weight: FontWeight.w700)), Text('${p.posts}', style: mktText(12)), Text(groupedCount(p.reach), style: mktText(12)), Text(groupedCount(p.engagements), style: mktText(12)), Text(p.er == null ? '—' : '${p.er}%', style: mktText(12, weight: FontWeight.w700))]],
+                  rowKeys: [for (final p in r.platforms) Key('soc_report_platform_${p.platform}')],
+                  columns: const [MktCol('Platform', flex: 3), MktCol('Posts', width: 48, align: Alignment.center), MktCol('Reach', flex: 2), MktCol('Engagements', flex: 2), MktCol('ER', width: 52, align: Alignment.centerRight), MktCol('Reach growth', width: 84, align: Alignment.centerRight)],
+                  rows: [
+                    for (final p in r.platforms)
+                      [
+                        Text(p.label, style: mktText(12, weight: FontWeight.w700)),
+                        Text('${p.posts}', style: mktText(12)),
+                        Text(groupedCount(p.reach), style: mktText(12)),
+                        Text(groupedCount(p.engagements), style: mktText(12)),
+                        Text(p.er == null ? '—' : '${p.er}%', style: mktText(12, weight: FontWeight.w700)),
+                        Text(growthText(p.change['reach']), style: mktText(12, weight: FontWeight.w700, color: growthColor(p.change['reach']))),
+                      ],
+                  ],
                 ),
         )),
       ],

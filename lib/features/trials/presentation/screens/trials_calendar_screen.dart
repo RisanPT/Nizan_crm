@@ -680,7 +680,7 @@ class TrialsCalendarScreen extends HookConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _showTrialPopup(context, ref, crm, t),
+        onTap: () => showTrialPopup(context, ref, crm, t),
         onLongPress: () => context.push('/trials/${t.id}'),
         borderRadius: BorderRadius.circular(8),
         child: Container(
@@ -713,8 +713,10 @@ class TrialsCalendarScreen extends HookConsumerWidget {
   }
 
   // ── Trial detail popup ────────────────────────────────────────────────
-  void _showTrialPopup(
-      BuildContext context, WidgetRef ref, CrmTheme crm, Trial t) {
+  /// Also opened from the main Calendar Scheduler when it shows trials.
+  static void showTrialPopup(
+      BuildContext context, WidgetRef ref, CrmTheme crm, Trial t,
+      {Color? headColor}) {
     var status = t.status;
     var saving = false;
     const statuses = ['scheduled', 'completed', 'postponed', 'cancelled'];
@@ -754,7 +756,7 @@ class TrialsCalendarScreen extends HookConsumerWidget {
       context: context,
       builder: (dctx) => StatefulBuilder(
         builder: (dctx, setLocal) {
-          final head = _statusColor(status);
+          final head = headColor ?? _statusColor(status);
           Future<void> saveStatus(String s) async {
             setLocal(() {
               status = s;

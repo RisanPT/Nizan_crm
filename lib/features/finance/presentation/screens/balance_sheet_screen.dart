@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -143,8 +144,10 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
 
   Future<void> _exportCsv(
       BuildContext context, BalanceSheetReport r, List<ReportLine> equityLines) async {
+    // as on a day: said in the file, and in its name
+    final asOn = ReportRange(from: _asOf ?? DateTime.now(), to: _asOf ?? DateTime.now());
     final rows = <List<Object?>>[
-      ['Balance Sheet'],
+      ['Balance Sheet', 'As on ${asOn.label}'],
       ['Section', 'Code', 'Account', 'Amount'],
       for (final l in r.assets) ['Asset', l.code, l.name, csvNum(l.amount)],
       ['', '', 'Total Assets', csvNum(r.totalAssets)],
@@ -155,7 +158,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
       ['', '', 'Total Liabilities + Equity', csvNum(r.liabilitiesAndEquity)],
     ];
     try {
-      await downloadCsv('balance_sheet.csv', rows);
+      await downloadCsv('balance_sheet_${asOn.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Balance sheet exported')));

@@ -195,6 +195,8 @@ class _FakeBookings extends BookingNotifier {
     Booking booking, {
     bool confirmFleetConflict = false,
     bool confirmDriverDay = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
   }) async {
     calls.add((
       driverId: booking.driverId,

@@ -548,6 +548,9 @@ class Booking {
   final String staffInstructions;
   final String internalRemarks;
   final bool contentCreationRequired;
+
+  /// Ticked on the booking: an influencer collaboration (its own colour on the calendar). See [isInfluencerWork].
+  final bool influencerWork;
   final DateTime bookingDate; // The "record" / calendar date
   final List<DateTime> selectedDates;
   final DateTime serviceStart; // Start of service period
@@ -645,6 +648,7 @@ class Booking {
     this.staffInstructions = '',
     this.internalRemarks = '',
     this.contentCreationRequired = false,
+    this.influencerWork = false,
     required this.bookingDate,
     this.selectedDates = const [],
     required this.serviceStart,
@@ -699,6 +703,15 @@ class Booking {
     );
     final end = DateTime(serviceEnd.year, serviceEnd.month, serviceEnd.day);
     return !d.isBefore(start) && !d.isAfter(end);
+  }
+
+  /// An influencer work: ticked on the booking, or — for works entered before the tick existed — "influencer" written in the client
+  /// name, the service or the remarks (the old calendar titled them "INFLUENCER WORK").
+  bool get isInfluencerWork {
+    if (influencerWork) return true;
+    bool says(String s) => s.toLowerCase().contains('influencer');
+    return says(customerName) || says(service) || says(internalRemarks) || says(staffInstructions) ||
+        bookingItems.any((i) => says(i.service) || says(i.internalRemarks));
   }
 
   String get initials =>
@@ -1062,6 +1075,7 @@ class Booking {
       internalRemarks: json['internalRemarks'] as String? ?? '',
       contentCreationRequired:
           json['contentCreationRequired'] as bool? ?? false,
+      influencerWork: json['influencerWork'] == true,
       bookingDate: parsedSelectedDates.isNotEmpty
           ? parsedSelectedDates.first
           : parsedBookingDate,
@@ -1154,6 +1168,7 @@ class Booking {
       'staffInstructions': staffInstructions,
       'internalRemarks': internalRemarks,
       'contentCreationRequired': contentCreationRequired,
+      'influencerWork': influencerWork,
       'bookingDate': _formatDateOnly(bookingDate),
       'selectedDates': selectedDates.map(_formatDateOnly).toList(),
       'serviceStart': serviceStart.toUtc().toIso8601String(),
@@ -1225,6 +1240,7 @@ class Booking {
     String? staffInstructions,
     String? internalRemarks,
     bool? contentCreationRequired,
+    bool? influencerWork,
     DateTime? bookingDate,
     List<DateTime>? selectedDates,
     DateTime? serviceStart,
@@ -1301,6 +1317,7 @@ class Booking {
       internalRemarks: internalRemarks ?? this.internalRemarks,
       contentCreationRequired:
           contentCreationRequired ?? this.contentCreationRequired,
+      influencerWork: influencerWork ?? this.influencerWork,
       bookingDate: bookingDate ?? this.bookingDate,
       selectedDates: selectedDates ?? this.selectedDates,
       serviceStart: serviceStart ?? this.serviceStart,

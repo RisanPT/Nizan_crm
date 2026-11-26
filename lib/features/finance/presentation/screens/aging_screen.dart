@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -355,7 +356,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
       ['TOTAL', '', csvNum(r.totalNotYetDue), csvNum(r.current), csvNum(r.days30), csvNum(r.days60), csvNum(r.days90), csvNum(r.totalOverdue), csvNum(r.totalOutstanding), ''],
     ];
     try {
-      await downloadCsv('${_kind}_aging.csv', rows);
+      await downloadCsv('${_kind}_aging_${ReportRange(from: r.asOf ?? _asOf ?? DateTime.now(), to: r.asOf ?? _asOf ?? DateTime.now()).fileTag}.csv', rows);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label aging exported')));
       }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:nizan_crm/features/it/domain/task_extension.dart';
+
 enum ITTicketType {
   feature,
   bug,
@@ -303,6 +305,19 @@ class ITTaskModel {
   /// project's owning department).
   final String departmentName;
 
+  /// Planned cost — only sent to those who may see a project's money (else all zero / ''). '' = none given, 'amount' = [costAmount]
+  /// typed in rupees, 'rate' = [estimatedHours] × [costRate] (rupees per hour). [plannedCost] is what the server worked out. Only leaf
+  /// tasks carry cost; a phase's cost is the total of its sub-tasks. Deliberately NOT part of [toJson]: a task echoed back whole must
+  /// never carry, or clear, a cost — the editor sends cost keys itself, only for those who may set them.
+  final String costMode;
+  final double costAmount;
+  final double costRate;
+  final double plannedCost;
+
+  /// Every extension of the due date, oldest first (see domain/task_extension.dart). The server's alone: like the cost, deliberately NOT
+  /// part of [toJson], so a task echoed back whole can never write — or wipe — the history.
+  final List<ITExtension> extensions;
+
   const ITTaskModel({
     required this.id,
     required this.projectId,
@@ -328,7 +343,20 @@ class ITTaskModel {
     this.completedAt,
     this.createdAt,
     this.departmentName = '',
+    this.costMode = '',
+    this.costAmount = 0,
+    this.costRate = 0,
+    this.plannedCost = 0,
+    this.extensions = const [],
   });
+
+  /// How many times the due date was extended, and how it adds up.
+  int get extensionCount => extensions.length;
+  ExtensionSummary get extensionSummary => summarizeExtensions(extensions);
+
+  /// How many days past its due day this task is on [now] (0 when it is not late, has no due date, or is finished).
+  int overdueDays(DateTime now) => taskOverdueDays(due: dueDate, done: isCompleted, now: now);
+  bool isOverdue(DateTime now) => overdueDays(now) > 0;
 
   /// Readable ticket key like IT-042
   String get ticketKey {
@@ -421,6 +449,14 @@ class ITTaskModel {
       completedAt: _parseDate(j['completedAt']),
       createdAt: _parseDate(j['createdAt']),
       departmentName: (j['departmentName'] ?? '').toString(),
+      costMode: (j['costMode'] ?? '').toString(),
+      costAmount: (j['costAmount'] as num?)?.toDouble() ?? 0,
+      costRate: (j['costRate'] as num?)?.toDouble() ?? 0,
+      plannedCost: (j['plannedCost'] as num?)?.toDouble() ?? 0,
+      extensions: [
+        for (final e in (j['extensions'] as List?) ?? const [])
+          if (e is Map) ?ITExtension.tryParse(e.cast<String, dynamic>()),
+      ],
     );
   }
 
@@ -474,6 +510,11 @@ class ITTaskModel {
     DateTime? completedAt,
     DateTime? createdAt,
     String? departmentName,
+    String? costMode,
+    double? costAmount,
+    double? costRate,
+    double? plannedCost,
+    List<ITExtension>? extensions,
   }) {
     return ITTaskModel(
       id: id ?? this.id,
@@ -500,6 +541,11 @@ class ITTaskModel {
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt ?? this.createdAt,
       departmentName: departmentName ?? this.departmentName,
+      costMode: costMode ?? this.costMode,
+      costAmount: costAmount ?? this.costAmount,
+      costRate: costRate ?? this.costRate,
+      plannedCost: plannedCost ?? this.plannedCost,
+      extensions: extensions ?? this.extensions,
     );
   }
 

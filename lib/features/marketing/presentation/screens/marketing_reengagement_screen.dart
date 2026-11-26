@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
-import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/whatsapp_service.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 
 /// Client Re-engagement worklist — past brides whose last event was more than N
@@ -18,129 +17,108 @@ class MarketingReEngagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
-    final isMobile = ResponsiveBuilder.isMobile(context);
     final months = ref.watch(reEngagementMonthsProvider);
     final async = ref.watch(reEngagementProvider);
 
-    return Scaffold(
-      backgroundColor: crm.background,
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(reEngagementProvider),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-              isMobile ? 14 : 24, 18, isMobile ? 14 : 24, 32),
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => context.canPop()
-                      ? context.pop()
-                      : context.go('/marketing/insights'),
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                8.wg,
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Client Re-engagement',
-                          style: TextStyle(
-                              fontSize: isMobile ? 20 : 25,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
-                      Text('Past brides due for a re-touch',
-                          style: TextStyle(
-                              fontSize: 12, color: crm.textSecondary)),
-                    ],
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(reEngagementProvider),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+            children: [
+              MktHeader(
+                icon: Icons.forum_outlined,
+                title: 'Client Re-engagement',
+                subtitle: 'Past brides due for a re-touch',
+                actions: [
+                  MktPill(
+                    label: 'Back',
+                    icon: Icons.arrow_back,
+                    trailing: false,
+                    onTap: () => context.canPop() ? context.pop() : context.go('/marketing/insights'),
                   ),
-                ),
-              ],
-            ),
-            14.hg,
-
-            // Window selector
-            Row(
-              children: [
-                Text('No booking in the last',
-                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
-                10.wg,
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final m in _windows)
-                        _chip(crm, '${m}mo', months == m, () {
-                          ref.read(reEngagementMonthsProvider.notifier).state = m;
-                        }),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            18.hg,
-
-            async.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 50),
-                child: Center(child: CircularProgressIndicator()),
+                ],
               ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 50),
-                child: AppErrorView(error: e, onRetry: () => ref.invalidate(reEngagementProvider)),
+              const SizedBox(height: 14),
+
+              // Window selector
+              Text('No booking in the last', style: mktText(12.5, color: Mkt.inkSoft)),
+              8.hg,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final m in _windows)
+                    MktFilterChip(
+                      label: '${m}mo',
+                      selected: months == m,
+                      onTap: () {
+                        ref.read(reEngagementMonthsProvider.notifier).state = m;
+                      },
+                    ),
+                ],
               ),
-              data: (r) {
-                if (r.clients.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Center(
-                      child: Text(
-                          'No clients are due for re-engagement in this window.',
-                          style: TextStyle(color: crm.textSecondary)),
+              14.hg,
+
+              async.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 50),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 50),
+                  child: AppErrorView(error: e, onRetry: () => ref.invalidate(reEngagementProvider)),
+                ),
+                data: (r) {
+                  if (r.clients.isEmpty) {
+                    return const MktCard(
+                      title: 'Clients due',
+                      icon: Icons.people_alt_outlined,
+                      child: MktEmpty(
+                        'No clients are due for re-engagement in this window.',
+                        icon: Icons.favorite_border,
+                        height: 130,
+                      ),
+                    );
+                  }
+                  return MktCard(
+                    title: '${r.count} clients due',
+                    icon: Icons.people_alt_outlined,
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < r.clients.length; i++)
+                          _clientRow(context, r.clients[i], last: i == r.clients.length - 1),
+                      ],
                     ),
                   );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${r.count} clients due',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: crm.textPrimary)),
-                    12.hg,
-                    for (final c in r.clients)
-                      _clientCard(context, crm, c),
-                  ],
-                );
-              },
-            ),
-          ],
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _clientCard(BuildContext context, CrmTheme crm, ReEngagementClient c) {
+  Widget _clientRow(BuildContext context, ReEngagementClient c, {required bool last}) {
+    final name = c.customerName.isEmpty ? c.phone : c.customerName;
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border),
+        border: last ? null : const Border(bottom: BorderSide(color: Mkt.border)),
       ),
       child: Row(
         children: [
+          MktAvatar(name, size: 34),
+          10.wg,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(c.customerName.isEmpty ? c.phone : c.customerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(13.5, weight: FontWeight.w800)),
                 2.hg,
                 Text(
                     [
@@ -148,18 +126,23 @@ class MarketingReEngagementScreen extends ConsumerWidget {
                       'last event ${c.monthsSince} mo ago',
                       if (c.bookings > 1) '${c.bookings} past bookings',
                     ].join('  •  '),
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                    style: mktText(11.5, color: Mkt.inkSoft)),
               ],
             ),
           ),
           8.wg,
           FilledButton.icon(
             onPressed: c.phone.isEmpty ? null : () => _whatsapp(context, c),
-            icon: const Icon(Icons.chat_outlined, size: 17),
+            icon: const Icon(Icons.chat_outlined, size: 16),
             label: const Text('WhatsApp'),
             style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF25D366),
-                foregroundColor: Colors.white),
+              backgroundColor: Mkt.good,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+              textStyle: mktText(12.5, weight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -180,25 +163,6 @@ class MarketingReEngagementScreen extends ConsumerWidget {
       }
     }
   }
-
-  Widget _chip(CrmTheme crm, String label, bool sel, VoidCallback onTap) =>
-      InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(100),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: sel ? crm.primary : crm.surface,
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: sel ? crm.primary : crm.border),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: sel ? Colors.white : crm.textSecondary)),
-        ),
-      );
 }
 
 extension _Gap on num {

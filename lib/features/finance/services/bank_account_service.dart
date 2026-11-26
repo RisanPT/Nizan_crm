@@ -12,11 +12,15 @@ class BankAccountsResult {
   final double totalBalance;
   final double bankTotal;
   final double cashTotal;
+
+  /// The same totals at the end of last month, for "vs last month".
+  final PreviousBalances previous;
   const BankAccountsResult({
     required this.accounts,
     required this.totalBalance,
     this.bankTotal = 0,
     this.cashTotal = 0,
+    this.previous = const PreviousBalances(),
   });
 }
 
@@ -35,6 +39,7 @@ class BankAccountService {
         totalBalance: (data['totalBalance'] as num?)?.toDouble() ?? 0,
         bankTotal: (data['bankTotal'] as num?)?.toDouble() ?? 0,
         cashTotal: (data['cashTotal'] as num?)?.toDouble() ?? 0,
+        previous: data['previous'] is Map ? PreviousBalances.fromJson((data['previous'] as Map).cast<String, dynamic>()) : const PreviousBalances(),
       );
     } catch (e) {
       throw AppException(e, action: 'load bank accounts');
@@ -128,6 +133,26 @@ class BankAccountService {
     }
   }
 
+  /// A page of the account's statement: each row with what it was for and the balance after it.
+  Future<BankTxnResult> getStatement(BankTxnQuery q) async {
+    try {
+      final res = await _dio.get('/bank-accounts/${q.accountId}/transactions', queryParameters: q.toParams());
+      return BankTxnResult.fromJson((res.data as Map).cast<String, dynamic>());
+    } catch (e) {
+      throw AppException(e, action: 'load transactions');
+    }
+  }
+
+  /// Every row that matches [q] (no paging), newest first — for an export.
+  Future<BankTxnResult> exportStatement(BankTxnQuery q) async {
+    try {
+      final res = await _dio.get('/bank-accounts/${q.accountId}/transactions', queryParameters: q.toParams(export: true));
+      return BankTxnResult.fromJson((res.data as Map).cast<String, dynamic>());
+    } catch (e) {
+      throw AppException(e, action: 'export transactions');
+    }
+  }
+
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/bank-accounts/$id');
@@ -152,4 +177,9 @@ final bankLedgerOptionsProvider = FutureProvider.autoDispose<List<LedgerOption>>
 /// Ledger movements on one account since its last manual balance.
 final bankTransactionsProvider = FutureProvider.autoDispose.family<BankTxnResult, String>((ref, id) async {
   return ref.watch(bankAccountServiceProvider).getTransactions(id);
+});
+
+/// A page of one account's statement (filters, period and page are in the query).
+final bankStatementProvider = FutureProvider.autoDispose.family<BankTxnResult, BankTxnQuery>((ref, query) async {
+  return ref.watch(bankAccountServiceProvider).getStatement(query);
 });

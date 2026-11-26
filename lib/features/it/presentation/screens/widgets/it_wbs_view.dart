@@ -8,7 +8,10 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/utils/export_utils.dart';
+import 'package:nizan_crm/core/utils/rupees.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
+import 'package:nizan_crm/features/it/domain/task_extension.dart';
 import 'package:nizan_crm/features/it/domain/task_rights.dart';
 import 'package:nizan_crm/features/it/domain/task_tree.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
@@ -47,6 +50,10 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
   TaskRights _rights(ITTask t) => taskRightsFor(_project, t, myEmployeeId: _me);
   bool get _isIt => (_project?.targetDepartment ?? 'it').toLowerCase().trim() == 'it';
 
+  /// The planned cost of every task (a phase: the total of its sub-tasks). Money, so only for those who may see the project's cost.
+  Map<String, double> _rolled = const {};
+  bool get _showCost => _project?.access.canSeeCost ?? false;
+
   final Set<String> _collapsed = {};
   final _search = TextEditingController();
   final _hScroll = ScrollController();
@@ -58,14 +65,17 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
   static const double _wNo = 76;
   static const double _wOwner = 160;
   static const double _wDate = 92;
+  // the due date also carries a small "extended ×N" badge
+  static const double _wDue = 112;
   static const double _wDur = 92;
   static const double _wProgress = 160;
   static const double _wStatus = 132;
+  static const double _wCost = 112;
   static const double _wActions = 44;
   static const double _titleMin = 280;
   static const double _phaseHeight = 52;
   static const double _rowHeight = 48;
-  double get _minWidth => _wNo + _wOwner + _wDate * 2 + _wDur + _wProgress + _wStatus + _wActions + _titleMin;
+  double get _minWidth => _wNo + _wOwner + _wDate + _wDue + _wDur + _wProgress + _wStatus + _wActions + _titleMin + (_showCost ? _wCost : 0);
 
   @override
   void dispose() {
@@ -87,6 +97,7 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
     final project = ref.watch(projectsProvider).value?.where((p) => p.id == widget.projectId).firstOrNull;
     _project = project;
     _me = ref.watch(authSessionProvider)?.employeeId ?? '';
+    _rolled = _showCost ? rolledTaskCosts(widget.tasks) : const {};
     final forest = buildWbsForest(widget.tasks);
     final summary = wbsSummary(widget.tasks, forest);
     final rows = wbsRows(forest, tree: _tree, collapsed: _collapsed, query: _query, filter: _filter);
@@ -488,8 +499,9 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
         Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: Text('Task / Phase', style: h()))),
         _cell(_wOwner, Text('Owner', style: h())),
         _cell(_wDate, Text('Start Date', style: h())),
-        _cell(_wDate, Text('Due Date', style: h())),
+        _cell(_wDue, Text('Due Date', style: h())),
         _cell(_wDur, Text('Duration', style: h())),
+        if (_showCost) _cell(_wCost, Align(alignment: Alignment.centerRight, child: Text('Cost', key: const Key('wbs_cost_header'), style: h()))),
         _cell(_wProgress, Text('Progress', style: h())),
         _cell(_wStatus, Text('Status', style: h())),
         const SizedBox(width: _wActions),
@@ -577,8 +589,9 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
           Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: title)),
           _cell(_wOwner, _owner(crm, t)),
           _cell(_wDate, Text(shortDate(t.startDate), style: TextStyle(fontSize: 13.5, color: crm.textPrimary))),
-          _cell(_wDate, Text(shortDate(t.deadline), style: TextStyle(fontSize: 13.5, color: crm.textPrimary))),
+          _cell(_wDue, _due(crm, t)),
           _cell(_wDur, Text(durationText(t), style: TextStyle(fontSize: 13.5, color: crm.textPrimary))),
+          if (_showCost) _cell(_wCost, _cost(crm, t, isPhase)),
           _cell(_wProgress, _progress(crm, pct)),
           _cell(_wStatus, Align(alignment: Alignment.centerLeft, child: _statusPill(crm, t.status))),
           SizedBox(width: _wActions, child: _rowMenu(node)),
@@ -613,6 +626,46 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
         Flexible(child: Text(s.labelFor(isIt: _isIt), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color))),
       ]),
     );
+  }
+
+  /// The due date: red when the task is late, with how many times it was extended beside it (the whole history is in the task's log).
+  Widget _due(CrmTheme crm, ITTask t) {
+    final late = t.overdueDays(DateTime.now()) > 0;
+    final text = Text(
+      shortDate(t.deadline),
+      key: Key('wbs_due_${t.id}'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: 13.5, fontWeight: late ? FontWeight.w700 : FontWeight.w400, color: late ? const Color(0xFFB91C1C) : crm.textPrimary),
+    );
+    if (t.extensionCount == 0) return text;
+    return Row(children: [
+      Flexible(child: text),
+      const SizedBox(width: 5),
+      Tooltip(
+        message: extensionHeadline(t.extensionSummary),
+        child: Container(
+          key: Key('wbs_ext_${t.id}'),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(color: const Color(0xFFB45309).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
+          child: Text('×${t.extensionCount}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB45309))),
+        ),
+      ),
+    ]);
+  }
+
+  /// What the task is planned at: a leaf its own cost, a phase the total of the leaves under it; "20 h × ₹500" shows on hover.
+  Widget _cost(CrmTheme crm, ITTask t, bool isPhase) {
+    final v = _rolled[t.id] ?? 0;
+    final text = Text(
+      v > 0 ? rupees(v) : '—',
+      key: Key('wbs_cost_${t.id}'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: 13.5, fontWeight: isPhase ? FontWeight.w800 : FontWeight.w500, color: v > 0 ? crm.textPrimary : crm.textSecondary),
+    );
+    final basis = costBasisText(t);
+    return Align(alignment: Alignment.centerRight, child: basis.isEmpty ? text : Tooltip(message: basis, child: text));
   }
 
   Widget _owner(CrmTheme crm, ITTask t) {

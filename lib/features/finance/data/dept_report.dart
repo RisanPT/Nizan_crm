@@ -46,6 +46,8 @@ class DeptMetric {
       'pct' => '${n.toStringAsFixed(1)}%',
       'ratio' => n.toStringAsFixed(2),
       'days' => '${n.toStringAsFixed(n == n.roundToDouble() ? 0 : 1)} days',
+      // the CRM response time (backend deptReportController.js — filled in from the CRM records)
+      'hours' => '${n.toStringAsFixed(n == n.roundToDouble() ? 0 : 1)} h',
       _ => n.toStringAsFixed(0),
     };
   }

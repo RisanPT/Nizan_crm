@@ -451,7 +451,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                     key: const Key('gantt_empty_wizard'),
                     onPressed: _openPlanWizard,
                     icon: Icon(Icons.trending_up_rounded, size: 18, color: crm.primary),
-                    label: const Text('Gantt Plan Wizard'),
+                    label: const Text('Gratt Plan Wizard'),
                   ),
                 ],
               ),

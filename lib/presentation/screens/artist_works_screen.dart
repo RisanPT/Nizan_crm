@@ -1,3 +1,4 @@
+import 'package:nizan_crm/features/marketing/presentation/footage/work_footage_card.dart';
 import 'dart:async';
 import '../common_widgets/reference_images.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_booking_care_card.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/controllers/next_work_provider.dart';
 import 'package:nizan_crm/features/bookings/data/next_work_hint.dart';
@@ -1996,6 +1998,10 @@ class _ExpandedDetails extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // the client's health notes from the CRM (allergies, pregnancy …) — shown only when there are some
+              CrmClientHealthNote(bookingId: booking.id),
+              // the work's footage: once it is done, the artist puts the videos in Dropbox (folder named after the work) and adds the link
+              WorkFootageCard(bookingId: booking.id),
               if (!isPostponed) WorkTimerWidget(booking: booking),
               if (isPostponed) ...[
                 Container(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/sales_eod_dialog.dart';
 
 class ExportSalesReportDialog extends StatefulWidget {
@@ -19,6 +21,10 @@ class ExportSalesReportDialog extends StatefulWidget {
   final void Function(bool) onJanMarReport;
   final void Function(bool, DateTime, String) onMonthEndCashFlowReport;
   final VoidCallback? onSalesEodReport;
+
+  /// A report for any days the person picks: called with the date basis, the days (both ends inclusive) and the report type
+  /// ('sales', 'executive' or 'crm' — the full ledger). Null leaves the "Choose your own dates" section out.
+  final void Function(bool useEventDate, ReportRange range, String reportType)? onCustomRangeReport;
 
   /// Shows the PDF / CSV switch; called with true when CSV is chosen.
   final ValueChanged<bool>? onFormatChanged;
@@ -41,6 +47,7 @@ class ExportSalesReportDialog extends StatefulWidget {
     required this.onJanMarReport,
     required this.onMonthEndCashFlowReport,
     this.onSalesEodReport,
+    this.onCustomRangeReport,
     this.onFormatChanged,
   });
 
@@ -313,7 +320,7 @@ class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
                     _OptionCard(
                       icon: Icons.receipt_long_outlined,
                       title: 'Full Sales Ledger',
-                      subtitle: 'Complete list of all bookings with status and totals.',
+                      subtitle: 'Every booking of this month with status and totals. For other dates, use "Choose your own dates" below.',
                       onTap: () {
                         Navigator.pop(context);
                         widget.onFullLedger(_useEventDate);
@@ -404,6 +411,35 @@ class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
                         }
                       },
                     ),
+                    if (widget.onCustomRangeReport != null) ...[
+                      24.h,
+                      _buildSectionHeader(theme, 'Choose your own dates'),
+                      12.h,
+                      for (final (type, icon, title, sub) in const [
+                        ('sales', Icons.insights_outlined, 'Sales Report for chosen dates', 'Bookings, revenue and staff performance between two dates you pick.'),
+                        ('executive', Icons.dashboard_customize_outlined, 'Executive Summary for chosen dates', 'The full summary — metrics, charts and top performers — for any days.'),
+                        ('crm', Icons.receipt_long_outlined, 'Sales Ledger for chosen dates', 'Every booking between two dates, with status and totals.'),
+                      ]) ...[
+                        _OptionCard(
+                          key: Key('export_custom_$type'),
+                          icon: icon,
+                          title: title,
+                          subtitle: sub,
+                          onTap: () async {
+                            final range = await showReportRangeDialog(
+                              context,
+                              title: title,
+                              subtitle: _useEventDate ? 'Counted by the event date.' : 'Counted by the booking date.',
+                              confirmLabel: 'Download',
+                            );
+                            if (range == null || !context.mounted) return;
+                            Navigator.pop(context);
+                            widget.onCustomRangeReport!(_useEventDate, range, type);
+                          },
+                        ),
+                        12.h,
+                      ],
+                    ],
                     24.h,
                     _buildSectionHeader(theme, 'Quarterly & Periodic Audits'),
                     12.h,
@@ -495,6 +531,7 @@ class _OptionCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _OptionCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,

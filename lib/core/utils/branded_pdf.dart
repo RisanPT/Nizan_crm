@@ -74,7 +74,7 @@ pw.Widget _header(pw.MemoryImage? logo, String title, String? subtitle) {
             pw.Text(pdfSafe(subtitle), style: pw.TextStyle(fontSize: 11, color: _muted)),
         ]),
       ),
-      pw.Text('Team N ERP',
+      pw.Text('Team N Makeovers',
           style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: kPdfBrand)),
     ]),
     pw.SizedBox(height: 8),
@@ -91,7 +91,7 @@ pw.Widget _footer(pw.Context ctx) {
       border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.6)),
     ),
     child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-      pw.Text('Team N ERP  -  generated $gen',
+      pw.Text('Team N Makeovers  -  generated $gen',
           style: pw.TextStyle(fontSize: 8, color: _muted)),
       pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
           style: pw.TextStyle(fontSize: 8, color: _muted)),

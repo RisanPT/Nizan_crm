@@ -8,6 +8,10 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/client_chat/controllers/chat_api_service.dart';
 import 'package:nizan_crm/features/client_chat/data/conversation.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/crm/data/crm_models.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
 
 /// The staff concierge-chat inbox: every client thread, newest activity first,
 /// with search, an open/closed filter and unread badges. Tapping a row opens
@@ -116,6 +120,24 @@ class _ClientChatInboxPageState extends ConsumerState<ClientChatInboxPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  // whose chats: anyone's, the ones I hold, or the ones nobody has answered yet
+                  Row(
+                    children: [
+                      for (final (k, l) in const [('', 'Anyone'), ('me', 'Mine'), ('unassigned', 'Not assigned')]) ...[
+                        _FilterChip(
+                          key: Key('chatAssignee_${k.isEmpty ? 'any' : k}'),
+                          label: l,
+                          selected: filter.assignee == k,
+                          onTap: () {
+                            final n = ref.read(clientChatFilterProvider.notifier);
+                            n.state = n.state.copyWith(assignee: k);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -141,8 +163,10 @@ class _ClientChatInboxPageState extends ConsumerState<ClientChatInboxPage> {
                       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
                       itemCount: convos.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) =>
-                          _ConversationTile(convo: convos[i]),
+                      itemBuilder: (context, i) => _ConversationTile(
+                        convo: convos[i],
+                        canAssign: Access.of(ref.watch(authSessionProvider)).canAssignCrmWork,
+                      ),
                     ),
                   );
                 },
@@ -160,12 +184,15 @@ class _ClientChatInboxPageState extends ConsumerState<ClientChatInboxPage> {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.convo});
+class _ConversationTile extends ConsumerWidget {
+  const _ConversationTile({required this.convo, this.canAssign = false});
   final ClientConversation convo;
 
+  /// The CRM Head (and management) can give the chat to someone.
+  final bool canAssign;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final unread = convo.unreadForStaff;
     final hasUnread = unread > 0;
@@ -276,9 +303,35 @@ class _ConversationTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        CrmOwnerChip(key: Key('chatOwner_${convo.id}'), name: convo.assignedStaffName, assigned: convo.assignedStaffId != null),
+                        if (convo.awaitingSince != null)
+                          Text(
+                            'waiting ${timeAgo(convo.awaitingSince)}',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: crm.warning),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
+              if (canAssign)
+                IconButton(
+                  key: Key('chatAssign_${convo.id}'),
+                  tooltip: 'Give this chat to…',
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  onPressed: () async {
+                    final owner = await showCrmAssignDialog(context, count: 1, title: 'Give the chat to');
+                    if (owner == null || !context.mounted) return;
+                    await crmAssign(context, ref, [CrmQueueItem(type: 'conversation', id: convo.id, ownerId: convo.assignedStaffId)], owner);
+                    ref.invalidate(clientConversationsProvider);
+                  },
+                ),
             ],
           ),
         ),
@@ -289,6 +342,7 @@ class _ConversationTile extends StatelessWidget {
 
 class _FilterChip extends StatelessWidget {
   const _FilterChip({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,

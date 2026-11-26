@@ -76,6 +76,13 @@ import '../../features/marketing/presentation/screens/marketing_dashboard_screen
 import '../../features/marketing/presentation/team/team_dashboard_screen.dart';
 import '../../features/marketing/presentation/socials/socials_screen.dart';
 import '../../features/marketing/presentation/portfolio/portfolio_screen.dart';
+import '../../features/marketing/presentation/leadreport/lead_report_screen.dart';
+import '../../features/marketing/presentation/campaignhub/campaign_hub_screen.dart';
+import '../../features/marketing/presentation/metaleads/meta_screen.dart';
+import '../../features/marketing/presentation/markets/markets_screen.dart';
+import '../../features/marketing/presentation/coordinations/coordinations_screen.dart';
+import '../../features/marketing/presentation/strategies/strategies_screen.dart';
+import '../../features/marketing/presentation/weekly/weekly_report_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_eod_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
@@ -84,9 +91,7 @@ import '../../features/marketing/presentation/screens/content_dashboard_screen.d
 import '../../features/marketing/presentation/screens/marketing_insights_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_analytics_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_calendar_screen.dart';
-import '../../features/marketing/presentation/screens/marketing_leads_report_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_reengagement_screen.dart';
-import '../../features/marketing/presentation/screens/campaigns_screen.dart';
 import '../../features/website/presentation/screens/website_home_screen.dart';
 import '../../features/website/presentation/screens/section_editor_screen.dart';
 import '../../features/website/presentation/screens/website_area_screens.dart';
@@ -112,6 +117,8 @@ import 'package:nizan_crm/features/accounts/presentation/screens/operations_dash
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/work_profit_screen.dart';
+import 'package:nizan_crm/features/associates/presentation/screens/associate_works_screen.dart';
+import 'package:nizan_crm/features/associates/presentation/screens/temp_staff_convert_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_reports_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_dashboard_screen.dart';
@@ -140,10 +147,20 @@ import 'package:nizan_crm/features/finance/presentation/screens/department_repor
 import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/bank_transactions_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
 import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
 import 'package:nizan_crm/features/client_chat/presentation/client_chat_inbox_page.dart';
 import 'package:nizan_crm/features/client_chat/presentation/client_chat_thread_page.dart';
+import 'package:nizan_crm/core/utils/report_range.dart' show ReportPreset, ReportRange;
+import 'package:nizan_crm/features/allocation/presentation/screens/allocation_board_screen.dart';
+import 'package:nizan_crm/features/allocation/presentation/screens/artist_management_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_case_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_cases_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_dashboard_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_my_work_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_re_engagement_screen.dart';
+import 'package:nizan_crm/features/crm/presentation/screens/crm_weekly_report_screen.dart';
 import 'package:nizan_crm/features/app_clients/presentation/app_clients_inbox_page.dart';
 import 'package:nizan_crm/features/app_clients/presentation/app_client_detail_page.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
@@ -249,6 +266,8 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/artist-collections') return 'payables.collections';
   if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
   if (path == '/accounts/work-profit') return 'payables.dashboard';
+  // Associate Works: whoever works with bookings (the server decides who sees the works and who also sees the fees)
+  if (path == '/associate-works' || path == '/associate-works/temp-staff') return 'bookings';
   if (path == '/accounts/admin-expenses') return 'payables.admin_expenses';
   if (path == '/accounts/transactions') return 'payables.transactions';
   if (path == '/accounts/subscriptions') return 'payables.subscriptions';
@@ -318,6 +337,10 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/calendar')) return 'marketing.calendar';
   if (path.startsWith('/marketing/leads-report')) return 'marketing.leads_report';
   if (path.startsWith('/marketing/campaigns')) return 'marketing.campaigns';
+  // Meta (ad spend sync + Lead Ads, /marketing/meta and /marketing/meta-leads) feeds the Campaigns hub, so it shares its permission.
+  if (path.startsWith('/marketing/meta')) return 'marketing.campaigns';
+  // Countries & Cities is the market list campaigns are aimed at, so it shares the Campaigns permission.
+  if (path.startsWith('/marketing/markets')) return 'marketing.campaigns';
   if (path.startsWith('/marketing/team')) return 'marketing.eod'; // the Team Dashboard is the EOD tracker's successor: same people, same key
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
@@ -361,6 +384,7 @@ const _ceoScreens = [
   '/monthly-objectives',
   '/accounts/dashboard',
   '/accounts/work-profit',
+  '/associate-works',
   '/company-finance/month-end',
   '/company-finance/decisions',
   '/company-finance/planning',
@@ -379,11 +403,18 @@ const _ceoScreens = [
   '/hr/department-scoring',
   '/reports',
   '/reviews',
+  '/crm/dashboard',
+  '/crm/team',
+  '/crm/cases',
+  '/crm/weekly',
+  '/booking/allocation',
+  '/artist-management',
   '/notifications',
   '/profile',
 ];
 
-bool _ceoMayOpen(String path) => _ceoScreens.any((p) => path == p || path.startsWith('$p/'));
+// The leadership login is read-only: the one-time temporary-staff conversion under Associate Works rewrites bookings, so it is not theirs.
+bool _ceoMayOpen(String path) => path != '/associate-works/temp-staff' && _ceoScreens.any((p) => path == p || path.startsWith('$p/'));
 
 bool isRouteAllowed(String path, Access access,
     {bool inventoryAccess = false, bool inventoryManage = false}) {
@@ -400,6 +431,16 @@ bool isRouteAllowed(String path, Access access,
     return access.canSeeArtistHead;
   }
   if (path.startsWith('/ceo')) return access.canSeeCeoHome;
+  // The CRM team's work: the dashboard, a member's figures and the month-end review are the CRM Head's (and management's); a member's
+  // own work, the cases and the call list are the whole team's. (The server decides what each sees inside — backend crmController.js.)
+  if (path == '/crm/dashboard' || path.startsWith('/crm/team') || path == '/crm/month-end' || path == '/crm/weekly') return access.canSeeCrmDashboard;
+  if (path.startsWith('/crm')) return access.canSeeCrmWork;
+  // the smart booking allocation — before the generic '/booking' rule below
+  if (path.startsWith('/booking/allocation') || path == '/artist-management') return access.canSeeAllocation;
+  // Client Chat and App Clients before the general /client rule (it would match /client-chat too): hidden while the client app is not
+  // live (kClientAppLive), else the client-facing staff of Client Reviews
+  if (path.startsWith('/client-chat')) return access.canSeeClientChat;
+  if (path.startsWith('/app-clients')) return access.canSeeAppClients;
   if (path.startsWith('/client')) return access.canSeeClients;
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
@@ -605,6 +646,8 @@ bool isRouteAllowed(String path, Access access,
 /// back to the first section the role can actually reach.
 String landingRouteFor(Access access,
     {bool inventoryAccess = false, bool inventoryManage = false}) {
+  // The CRM Head lands on the CRM dashboard. (Their role's home on the server stays /booking/requests, which an older build knows.)
+  if (access.isCrmHead) return '/crm/dashboard';
   final configured = access.homeRoute;
   if (configured.isNotEmpty &&
       isRouteAllowed(configured, access,
@@ -849,6 +892,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Sales Reports';
           } else if (state.uri.path == '/company-finance/assets') {
             title = 'Company Assets';
+          } else if (state.uri.path.startsWith('/company-finance/bank-balance')) {
+            title = 'Bank & Cash Balance';
           } else if (state.uri.path == '/company-finance/depreciation') {
             title = 'Depreciation';
           } else if (state.uri.path == '/company-finance/chart') {
@@ -951,6 +996,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Fleet Expenses';
           } else if (state.uri.path == '/accounts/work-profit') {
             title = 'Work Profit';
+          } else if (state.uri.path == '/associate-works') {
+            title = 'Associate Works';
+          } else if (state.uri.path == '/associate-works/temp-staff') {
+            title = 'Convert Temporary Staff';
           } else if (state.uri.path == '/accounts/admin-expenses') {
             title = 'Administrative Expenses';
           } else if (state.uri.path == '/accounts/transactions') {
@@ -973,6 +1022,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Socials';
           } else if (state.uri.path == '/marketing/portfolio') {
             title = 'Creative Portfolio';
+          } else if (state.uri.path == '/marketing/coordinations') {
+            title = 'Coordinations';
+          } else if (state.uri.path == '/marketing/strategies') {
+            title = 'Strategies & Developments';
+          } else if (state.uri.path == '/marketing/weekly') {
+            title = 'Marketing Weekly Report';
           } else if (state.uri.path == '/marketing/eod') {
             title = 'Marketing EOD & Team Log';
           } else if (state.uri.path == '/marketing/competitors') {
@@ -989,6 +1044,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Leads Report';
           } else if (state.uri.path == '/marketing/campaigns') {
             title = 'Campaigns';
+          } else if (state.uri.path == '/marketing/meta' || state.uri.path == '/marketing/meta-leads') {
+            title = 'Meta';
+          } else if (state.uri.path == '/marketing/markets') {
+            title = 'Countries & Cities';
           } else if (state.uri.path == '/marketing/re-engagement') {
             title = 'Client Re-engagement';
           } else if (state.uri.path == '/marketing/content/dashboard') {
@@ -1439,6 +1498,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const WorkProfitScreen(),
           ),
           GoRoute(
+            path: '/associate-works',
+            builder: (context, state) => const AssociateWorksScreen(),
+          ),
+          GoRoute(
+            path: '/associate-works/temp-staff',
+            builder: (context, state) => const TempStaffConvertScreen(),
+          ),
+          GoRoute(
             path: '/accounts/admin-expenses',
             builder: (context, state) =>
                 const AdministrativeExpensesScreen(),
@@ -1491,6 +1558,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => TeamDashboardScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
           ),
           GoRoute(
+            path: '/marketing/coordinations',
+            builder: (context, state) => CoordinationsScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
+          ),
+          GoRoute(
+            path: '/marketing/strategies',
+            builder: (context, state) => StrategiesScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
+          ),
+          GoRoute(
+            path: '/marketing/weekly',
+            builder: (context, state) => const WeeklyReportScreen(),
+          ),
+          GoRoute(
             path: '/marketing/portfolio',
             builder: (context, state) => PortfolioScreen(initialTab: state.uri.queryParameters['tab'] ?? 'planner'),
           ),
@@ -1500,7 +1579,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/marketing/eod',
-            builder: (context, state) => const MarketingEodScreen(),
+            // ?tab= picks the tab (the sidebar's "Setup" link); a new tab from a link starts the screen afresh on it
+            builder: (context, state) {
+              final tab = state.uri.queryParameters['tab'] ?? '';
+              return MarketingEodScreen(key: ValueKey('eod-$tab'), initialTab: tab);
+            },
           ),
           GoRoute(
             path: '/marketing/competitors',
@@ -1524,11 +1607,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/marketing/leads-report',
-            builder: (context, state) => const MarketingLeadsReportScreen(),
+            builder: (context, state) => LeadReportScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
           ),
           GoRoute(
             path: '/marketing/campaigns',
-            builder: (context, state) => const CampaignsScreen(),
+            builder: (context, state) => CampaignHubScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
+          ),
+          GoRoute(
+            path: '/marketing/meta',
+            builder: (context, state) => MetaScreen(initialTab: state.uri.queryParameters['tab'] ?? 'spend'),
+          ),
+          GoRoute(
+            // the first address of the Lead Ads screen: still opens it
+            path: '/marketing/meta-leads',
+            builder: (context, state) => const MetaScreen(initialTab: 'leads'),
+          ),
+          GoRoute(
+            path: '/marketing/markets',
+            builder: (context, state) => const MarketsScreen(),
           ),
           GoRoute(
             path: '/marketing/re-engagement',
@@ -1717,6 +1813,56 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/app-clients',
             builder: (context, state) => const AppClientsInboxPage(),
           ),
+          // ── the smart booking allocation ──
+          GoRoute(
+            path: '/booking/allocation',
+            builder: (context, state) => AllocationBoardScreen(initialDay: state.uri.queryParameters['date']),
+          ),
+          GoRoute(
+            path: '/artist-management',
+            builder: (context, state) => const ArtistManagementScreen(),
+          ),
+          // ── CRM team work ──
+          GoRoute(
+            path: '/crm/dashboard',
+            builder: (context, state) => const CrmDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/crm/my-work',
+            builder: (context, state) => const CrmMyWorkScreen(),
+          ),
+          GoRoute(
+            path: '/crm/team/:userId',
+            builder: (context, state) {
+              final from = DateTime.tryParse(state.uri.queryParameters['from'] ?? '');
+              final to = DateTime.tryParse(state.uri.queryParameters['to'] ?? '');
+              return CrmMyWorkScreen(
+                key: ValueKey(state.pathParameters['userId']),
+                memberId: state.pathParameters['userId'],
+                initialRange: from != null && to != null ? ReportRange(from: from, to: to, preset: ReportPreset.custom) : null,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/crm/cases',
+            builder: (context, state) => const CrmCasesScreen(),
+          ),
+          GoRoute(
+            path: '/crm/cases/:id',
+            builder: (context, state) => CrmCaseScreen(caseId: state.pathParameters['id'] ?? ''),
+          ),
+          GoRoute(
+            path: '/crm/re-engagement',
+            builder: (context, state) => const CrmReEngagementScreen(),
+          ),
+          GoRoute(
+            path: '/crm/weekly',
+            builder: (context, state) => CrmWeeklyReportScreen(initialWeek: state.uri.queryParameters['week'] ?? ''),
+          ),
+          GoRoute(
+            path: '/crm/month-end',
+            builder: (context, state) => const DepartmentReportScreen(dept: 'crm'),
+          ),
           GoRoute(
             path: '/app-clients/:id',
             builder: (context, state) => AppClientDetailPage(
@@ -1859,6 +2005,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/bank-balance',
             builder: (context, state) => const BankBalanceScreen(),
+          ),
+          // one account's full list of transactions
+          GoRoute(
+            path: '/company-finance/bank-balance/:accountId/transactions',
+            builder: (context, state) => BankTransactionsScreen(accountId: state.pathParameters['accountId'] ?? ''),
           ),
           GoRoute(
             path: '/company-finance/depreciation',

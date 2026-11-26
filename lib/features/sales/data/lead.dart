@@ -51,6 +51,23 @@ class Lead {
   final String regionId;
   final String district;
   final String region;
+
+  /// Marketing details (all optional): where the bride is — Country → City, the names copied from the marketing list — and how to
+  /// reach and place her. [budget] is read in [budgetCurrency] ('' = the country's currency, else ₹); null = not told.
+  final String countryId;
+  final String country;
+  final String cityId;
+  final String city;
+
+  /// WhatsApp number when it is not the phone number ('' = the same as the phone).
+  final String whatsapp;
+  final double? budget;
+  final String budgetCurrency;
+  final String language;
+
+  /// Who referred her (free text until the Partner CRM exists) and the ad creative she came from (e.g. "Reel #17").
+  final String referralPartner;
+  final String creative;
   final String reason;
   final String remarks;
   /// Lost-approval workflow.
@@ -90,6 +107,16 @@ class Lead {
     this.regionId = '',
     this.district = '',
     this.region = '',
+    this.countryId = '',
+    this.country = '',
+    this.cityId = '',
+    this.city = '',
+    this.whatsapp = '',
+    this.budget,
+    this.budgetCurrency = '',
+    this.language = '',
+    this.referralPartner = '',
+    this.creative = '',
     required this.reason,
     required this.remarks,
     this.competitorName = '',
@@ -152,6 +179,16 @@ class Lead {
       regionId: _idOf(json['regionId']),
       district: json['district'] as String? ?? '',
       region: json['region'] as String? ?? '',
+      countryId: _idOf(json['countryId']),
+      country: json['country'] as String? ?? '',
+      cityId: _idOf(json['cityId']),
+      city: json['city'] as String? ?? '',
+      whatsapp: json['whatsapp'] as String? ?? '',
+      budget: (json['budget'] as num?)?.toDouble(),
+      budgetCurrency: json['budgetCurrency'] as String? ?? '',
+      language: json['language'] as String? ?? '',
+      referralPartner: json['referralPartner'] as String? ?? '',
+      creative: json['creative'] as String? ?? '',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
       competitorName: json['competitorName'] as String? ?? '',
@@ -255,6 +292,16 @@ class Lead {
       regionId: regionId ?? this.regionId,
       district: district ?? this.district,
       region: region ?? this.region,
+      countryId: countryId,
+      country: country,
+      cityId: cityId,
+      city: city,
+      whatsapp: whatsapp,
+      budget: budget,
+      budgetCurrency: budgetCurrency,
+      language: language,
+      referralPartner: referralPartner,
+      creative: creative,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,
       competitorName: competitorName ?? this.competitorName,

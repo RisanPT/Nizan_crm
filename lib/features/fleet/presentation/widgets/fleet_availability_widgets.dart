@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/features/allocation/data/allocation_models.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/artist_conflict_dialog.dart'
+    show showArtistConflictDialog;
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/data/driver_day.dart';
@@ -224,15 +227,19 @@ Future<bool> showFleetConflictDialog(
 /// One driver per artist per day: if the artist's other works that day have another driver, the
 /// server asks first (409 DRIVER_DAY_CONFLICT) — "move them too?"; after the save, the works that
 /// got the driver too (or were left alone, and why) are shown.
+///
+/// An artist the server refuses for a booking (ARTIST_CONFLICT) is asked about the same way.
 Future<Booking?> updateBookingConfirmingFleet(
   BuildContext context,
   WidgetRef ref,
-  Booking booking,
-) async {
+  Booking booking, {
+  Map<String, dynamic>? allocationIntent,
+}) async {
   var confirmFleet = false;
   var confirmDriverDay = false;
+  var confirmArtist = false;
   // At most one question of each kind, then a final save.
-  for (var attempt = 0; attempt < 3; attempt++) {
+  for (var attempt = 0; attempt < 4; attempt++) {
     try {
       final saved = await ref
           .read(bookingProvider.notifier)
@@ -240,6 +247,8 @@ Future<Booking?> updateBookingConfirmingFleet(
             booking,
             confirmFleetConflict: confirmFleet,
             confirmDriverDay: confirmDriverDay,
+            confirmArtistConflict: confirmArtist,
+            extraBody: allocationIntent == null ? null : {'allocationIntent': allocationIntent},
           );
       final result = saved.driverDay;
       if (result != null && context.mounted) {
@@ -249,6 +258,7 @@ Future<Booking?> updateBookingConfirmingFleet(
     } catch (error) {
       final fleet = FleetConflict.of(error);
       final day = DriverDayConflict.of(error);
+      final artist = AllocationRefusal.of(error);
       if (fleet != null && !confirmFleet) {
         if (!context.mounted) return null;
         if (!await showFleetConflictDialog(context, fleet)) return null;
@@ -257,6 +267,10 @@ Future<Booking?> updateBookingConfirmingFleet(
         if (!context.mounted) return null;
         if (!await showDriverDayConflictDialog(context, day)) return null;
         confirmDriverDay = true;
+      } else if (artist != null && artist.isConflict && !confirmArtist) {
+        if (!context.mounted) return null;
+        if (!await showArtistConflictDialog(context, artist)) return null;
+        confirmArtist = true;
       } else {
         rethrow;
       }

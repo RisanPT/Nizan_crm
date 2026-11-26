@@ -6,11 +6,15 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/link_pickers.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_widgets.dart' show shootDay;
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart';
+import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 
 /// Create a post (on [day], in [status]) or change [post]. Where a post is planned, moved through the pipeline, and — once it is out —
-/// where its numbers are typed (from the platform's own insights: no platform API is connected).
+/// where its numbers are typed (from the platform's own insights: no platform API is connected). A post is made from an APPROVED (or
+/// final) asset of the Creative Portfolio and then belongs to that asset's shoot; a post with no asset can name the shoot it is for.
 Future<void> showPostEditor(BuildContext context, WidgetRef ref, {SocialPost? post, DateTime? day, String status = 'planned'}) {
   final form = _PostForm(post: post, day: day, status: status);
   if (MediaQuery.sizeOf(context).width >= 700) {
@@ -54,6 +58,10 @@ class _PostFormState extends ConsumerState<_PostForm> {
   late String _status = widget.post?.status ?? widget.status;
   late DateTime _date = widget.post?.day ?? widget.day ?? DateTime.now();
   late TimeOfDay _time = TimeOfDay.fromDateTime(widget.post?.scheduledDate ?? DateTime(2000, 1, 1, 10));
+  late String? _assetId = widget.post?.assetId;
+  late String? _shootId = widget.post?.shootId;
+  // titles of what was picked in this form (a saved link's title is read from the server)
+  String? _assetTitle, _shootTitle;
   bool _saving = false;
   String? _error;
 
@@ -74,6 +82,44 @@ class _PostFormState extends ConsumerState<_PostForm> {
   Future<void> _pickTime() async {
     final t = await showTimePicker(context: context, initialTime: _time);
     if (t != null) setState(() => _time = t);
+  }
+
+  Future<void> _pickAsset() async {
+    final r = await pickApprovedAsset(context, selectedId: _assetId);
+    if (r == null || !mounted) return;
+    final a = r.value;
+    setState(() {
+      _assetId = a?.id;
+      _assetTitle = a?.title;
+      if (a != null) {
+        // the post belongs to the asset's shoot (the server decides the same)
+        _shootId = a.shootId;
+        _shootTitle = null;
+        if (_thumb.text.trim().isEmpty && a.thumbUrl.isNotEmpty) _thumb.text = a.thumbUrl;
+      } else {
+        _shootId = null;
+        _shootTitle = null;
+      }
+    });
+  }
+
+  Future<void> _pickShoot() async {
+    final r = await pickShoot(context, selectedId: _shootId);
+    if (r == null || !mounted) return;
+    setState(() {
+      _shootId = r.value?.id;
+      _shootTitle = r.value == null ? null : '${r.value!.title} · ${shootDay(r.value!.shootDate, pattern: 'd MMM')}';
+    });
+  }
+
+  String? _assetLabel() {
+    if (_assetId == null) return null;
+    return _assetTitle ?? ref.watch(socialsAssetProvider(_assetId!)).maybeWhen(data: (a) => a.title, orElse: () => 'The linked asset');
+  }
+
+  String? _shootLabel() {
+    if (_shootId == null) return null;
+    return _shootTitle ?? ref.watch(shootDetailProvider(_shootId!)).maybeWhen(data: (d) => '${d.summary.title} · ${shootDay(d.summary.shootDate, pattern: 'd MMM')}', orElse: () => 'The linked shoot');
   }
 
   Future<void> _save() async {
@@ -98,11 +144,14 @@ class _PostFormState extends ConsumerState<_PostForm> {
       'permalink': _permalink.text.trim(),
       'thumbUrl': _thumb.text.trim(),
       'campaign': _campaign.text.trim(),
+      'assetId': _assetId,
+      // with an asset the server takes the asset's shoot; without one, the shoot named here
+      if (_assetId == null) 'shootId': _shootId,
       'metrics': {for (final e in _metrics.entries) if (e.value.text.trim().isNotEmpty) e.key: int.tryParse(e.value.text.trim()) ?? 0},
     };
     try {
       await ref.read(marketingSocialsServiceProvider).savePost(body, id: widget.post?.id);
-      refreshSocials(ref);
+      refreshPortfolio(ref);
       if (mounted) Navigator.pop(context);
     } on TeamRefusal catch (r) {
       if (mounted) setState(() { _error = r.message; _saving = false; });
@@ -126,7 +175,7 @@ class _PostFormState extends ConsumerState<_PostForm> {
     if (yes != true || !mounted) return;
     try {
       await ref.read(marketingSocialsServiceProvider).deletePost(widget.post!.id);
-      refreshSocials(ref);
+      refreshPortfolio(ref);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
@@ -181,6 +230,31 @@ class _PostFormState extends ConsumerState<_PostForm> {
                 TextField(key: const Key('post_caption'), controller: _caption, minLines: 2, maxLines: 4, decoration: _dec('Caption')),
                 const SizedBox(height: 10),
                 TextField(key: const Key('post_campaign'), controller: _campaign, decoration: _dec('Campaign (optional)')),
+                const SizedBox(height: 14),
+                Text('From the Creative Portfolio', style: mktText(13, weight: FontWeight.w800)),
+                Text('Only an approved or final asset can be posted. The post then counts as an output of the asset\'s shoot.', style: mktText(11.5, color: Mkt.inkSoft)),
+                const SizedBox(height: 8),
+                LinkField(key: const Key('post_asset'), label: 'Asset (approved or final)', icon: Icons.verified_outlined, hint: 'No asset', value: _assetLabel(), onTap: _pickAsset, onClear: () => setState(() {
+                  _assetId = null;
+                  _assetTitle = null;
+                  _shootId = null;
+                  _shootTitle = null;
+                })),
+                const SizedBox(height: 10),
+                LinkField(
+                  key: const Key('post_shoot'),
+                  label: 'Shoot',
+                  icon: Icons.videocam_outlined,
+                  hint: 'No shoot',
+                  value: _shootLabel(),
+                  onTap: _pickShoot,
+                  onClear: () => setState(() {
+                    _shootId = null;
+                    _shootTitle = null;
+                  }),
+                  locked: _assetId != null,
+                  note: _assetId != null ? (_shootId == null ? 'The asset belongs to no shoot.' : 'The asset\'s shoot.') : null,
+                ),
                 const SizedBox(height: 10),
                 TextField(key: const Key('post_thumb'), controller: _thumb, decoration: _dec('Thumbnail link (optional)', hint: 'https://…')),
                 const SizedBox(height: 10),
@@ -188,6 +262,15 @@ class _PostFormState extends ConsumerState<_PostForm> {
                 const SizedBox(height: 14),
                 Text('Numbers from the platform', style: mktText(13, weight: FontWeight.w800)),
                 Text('Typed once the post is out — they feed Performance, Top Content and the engagement overview.', style: mktText(11.5, color: Mkt.inkSoft)),
+                if (widget.post?.fromInstagram ?? false)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'These come from Instagram${widget.post!.metricsSyncedAt == null ? '' : ' (synced ${DateFormat('d MMM, h:mm a').format(widget.post!.metricsSyncedAt!)})'}: reach, views, likes, comments, shares and saves are replaced at each sync. Impressions, reposts and link clicks stay as typed.',
+                      key: const Key('post_metrics_from_instagram'),
+                      style: mktText(11.5, color: Mkt.primary, weight: FontWeight.w700, height: 1.35),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,

@@ -305,7 +305,7 @@ String manpowerSentMessage(ManpowerRequest r) {
 
 // ── the project's team ───────────────────────────────────────────────────────
 
-/// "Team & manpower" on the project's Overview: who HR has put on the project (and for how much of their time), where the
+/// "Manpower from HR" on the project's Overview: who HR has put on the project (and for how much of their time), where the
 /// project's requests for more people stand, and — for those who run it — the button to ask for more. Nothing is shown to
 /// someone who has no part in it and nothing to show.
 class ProjectTeamCard extends ConsumerWidget {
@@ -340,7 +340,7 @@ class ProjectTeamCard extends ConsumerWidget {
               children: [
                 Icon(Icons.groups_2_outlined, size: 18, color: crm.primary),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Team & manpower', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary))),
+                Expanded(child: Text('Manpower from HR', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary))),
                 if (requests.isNotEmpty)
                   TextButton(key: const Key('team_all_requests'), onPressed: () => context.go('/manpower'), child: const Text('All requests')),
               ],

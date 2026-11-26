@@ -98,7 +98,7 @@ class TeamMemberRow {
 
 /// One log as it reads in a feed.
 class TeamFeedItem {
-  const TeamFeedItem({required this.id, required this.member, required this.workedOn, this.memberId = '', this.at, this.day = '', this.projectLabel = '', this.kind = ActivityKind.task, this.status = WorkStatus.completed, this.minutes = 0, this.brand = TeamBrand.main, this.group = '', this.legacy = false});
+  const TeamFeedItem({required this.id, required this.member, required this.workedOn, this.memberId = '', this.at, this.day = '', this.projectLabel = '', this.projectKey = 'none', this.kind = ActivityKind.task, this.status = WorkStatus.completed, this.minutes = 0, this.brand = TeamBrand.main, this.group = '', this.groupId, this.contentId, this.legacy = false});
   final String id;
   final String memberId;
   final String member;
@@ -113,6 +113,13 @@ class TeamFeedItem {
   final String group;
   final bool legacy;
 
+  /// Which project the log is for, as the key the server filters by (`id:<projectId>`, `label:<text>` or `none`).
+  final String projectKey;
+  final String? groupId;
+
+  /// The Socials post the work published, when the log was tied to one.
+  final String? contentId;
+
   factory TeamFeedItem.fromJson(Map<String, dynamic> j) => TeamFeedItem(
         id: _s(j['id']),
         memberId: _s(j['memberId']),
@@ -126,6 +133,9 @@ class TeamFeedItem {
         minutes: _i(j['minutes']),
         brand: TeamBrand.parse(_s(j['brand'])),
         group: _s(j['group']),
+        groupId: j['groupId']?.toString(),
+        projectKey: _s(j['projectKey']).isEmpty ? 'none' : _s(j['projectKey']),
+        contentId: j['contentId']?.toString(),
         legacy: j['legacy'] == true,
       );
 }
@@ -156,14 +166,35 @@ class TrendPoint {
 }
 
 class AttendanceCounts {
-  const AttendanceCounts({this.day = '', this.present = 0, this.onShoot = 0, this.onLeave = 0, this.absent = 0});
+  const AttendanceCounts({this.day = '', this.present = 0, this.onShoot = 0, this.wfh = 0, this.onLeave = 0, this.absent = 0, this.timebox = const TimeboxInfo()});
   final String day;
   final int present;
   final int onShoot;
+
+  /// Working from home (the member set it for the day).
+  final int wfh;
   final int onLeave;
   final int absent;
-  factory AttendanceCounts.fromJson(Map<String, dynamic> j) => AttendanceCounts(day: _s(j['day']), present: _i(j['present']), onShoot: _i(j['onShoot']), onLeave: _i(j['onLeave']), absent: _i(j['absent']));
+
+  /// Where the counts come from (the Overview's card; the Attendance tab's summary carries it on AttendanceData).
+  final TimeboxInfo timebox;
+  factory AttendanceCounts.fromJson(Map<String, dynamic> j) => AttendanceCounts(day: _s(j['day']), present: _i(j['present']), onShoot: _i(j['onShoot']), wfh: _i(j['wfh']), onLeave: _i(j['onLeave']), absent: _i(j['absent']), timebox: TimeboxInfo.fromJson(_m(j['timebox'])));
 }
+
+/// The work modes a member can set for a day (backend models/MarketingWorkMode.js).
+enum WorkMode {
+  office('office', 'Office'),
+  onShoot('on_shoot', 'On Shoot'),
+  wfh('wfh', 'Work From Home');
+
+  const WorkMode(this.wire, this.label);
+  final String wire;
+  final String label;
+  static WorkMode? parse(String? s) => WorkMode.values.where((m) => m.wire == s).firstOrNull;
+}
+
+/// "Office", "On shoot", "Work from home", "On leave" — or "—".
+String workModeLabel(String wire) => switch (wire) { 'office' => 'Office', 'on_shoot' => 'On shoot', 'wfh' => 'Work from home', 'on_leave' => 'On leave', _ => '—' };
 
 class Deadline {
   const Deadline({required this.id, required this.title, this.project = '', this.dueDate = '', this.assignee = '', this.priority = 'medium'});
@@ -226,23 +257,77 @@ class ActivitySummary {
   factory ActivitySummary.fromJson(Map<String, dynamic> j) => ActivitySummary(day: _s(j['day']), logged: _i(j['logged']), completed: _i(j['completed']), inProgress: _i(j['inProgress']), meetings: _i(j['meetings']), minutes: _i(j['minutes']));
 }
 
+/// One row of the By Member / By Project / By Category views: the logs, the time and the completed ones under it.
+class ActivityViewRow {
+  const ActivityViewRow({required this.key, required this.label, this.logs = 0, this.minutes = 0, this.completed = 0});
+  final String key;
+  final String label;
+  final int logs;
+  final int minutes;
+  final int completed;
+  factory ActivityViewRow.fromJson(Map<String, dynamic> j) => ActivityViewRow(key: _s(j['key']), label: _s(j['label']), logs: _i(j['logs']), minutes: _i(j['minutes']), completed: _i(j['completed']));
+}
+
 class TeamActivityFeed {
-  const TeamActivityFeed({this.summary = const ActivitySummary(), this.total = 0, this.items = const []});
+  const TeamActivityFeed({this.summary = const ActivitySummary(), this.total = 0, this.items = const [], this.byMember = const [], this.byProject = const [], this.byCategory = const [], this.page = 1, this.pageSize = 100});
   final ActivitySummary summary;
   final int total;
   final List<TeamFeedItem> items;
-  factory TeamActivityFeed.fromJson(Map<String, dynamic> j) =>
-      TeamActivityFeed(summary: ActivitySummary.fromJson(_m(j['summary'])), total: _i(j['total']), items: _l(j['items']).map(TeamFeedItem.fromJson).toList());
+
+  /// The whole period three ways (the server counts them; the kind / category / project picked narrows only the feed).
+  final List<ActivityViewRow> byMember, byProject, byCategory;
+  final int page, pageSize;
+  factory TeamActivityFeed.fromJson(Map<String, dynamic> j) {
+    final v = _m(j['views']);
+    return TeamActivityFeed(
+      summary: ActivitySummary.fromJson(_m(j['summary'])),
+      total: _i(j['total']),
+      items: _l(j['items']).map(TeamFeedItem.fromJson).toList(),
+      byMember: _l(v['byMember']).map(ActivityViewRow.fromJson).toList(),
+      byProject: _l(v['byProject']).map(ActivityViewRow.fromJson).toList(),
+      byCategory: _l(v['byCategory']).map(ActivityViewRow.fromJson).toList(),
+      page: _in(j['page']) ?? 1,
+      pageSize: _in(j['pageSize']) ?? 100,
+    );
+  }
+}
+
+/// How the Team Activity tab cuts its feed — every cut is made on the server.
+class ActivityQuery {
+  const ActivityQuery({this.kind, this.group, this.project, this.memberId, this.label = ''});
+  final ActivityKind? kind;
+
+  /// A category (group id, or 'others'), a project key, or a member — what a row of a view was tapped for.
+  final String? group, project, memberId;
+
+  /// What that row was called, for the "showing …" chip.
+  final String label;
+  bool get narrowed => group != null || project != null || memberId != null;
+  ActivityQuery withKind(ActivityKind? k) => ActivityQuery(kind: k, group: group, project: project, memberId: memberId, label: label);
+  ActivityQuery get cleared => ActivityQuery(kind: kind);
+  Map<String, dynamic> get query => {'kind': ?kind?.wire, 'group': ?group, 'project': ?project};
+  @override
+  bool operator ==(Object other) => other is ActivityQuery && other.kind == kind && other.group == group && other.project == project && other.memberId == memberId;
+  @override
+  int get hashCode => Object.hash(kind, group, project, memberId);
 }
 
 class TeamTask {
   const TeamTask({
     required this.id, required this.title, this.description = '', this.assigneeId = '', this.assignee = '', this.brand = TeamBrand.main, this.group = '', this.groupId,
     this.projectLabel = '', this.isDeliverable = false, this.dueDate, this.priority = 'medium', this.status = WorkStatus.notStarted, this.progress = 0, this.overdue = false,
-    this.comments = const [],
+    this.comments = const [], this.initiativeId, this.devProjectId, this.source = 'task', this.requestStatus, this.link, this.canEdit = true, this.createdByMe = false,
   });
   final String id;
   final String title;
+
+  /// 'task' — a Team Dashboard task — or 'request': a Coordinations request given to the member, changed in Coordinations ([link]).
+  final String source;
+  final String? requestStatus;
+  final String? link;
+  final bool canEdit;
+  final bool createdByMe;
+  bool get isRequest => source == 'request';
   final String description;
   final String assigneeId;
   final String assignee;
@@ -257,6 +342,7 @@ class TeamTask {
   final int progress;
   final bool overdue;
   final List<({String by, String text})> comments;
+  final String? initiativeId, devProjectId;
 
   factory TeamTask.fromJson(Map<String, dynamic> j) => TeamTask(
         id: _s(j['id']),
@@ -275,7 +361,25 @@ class TeamTask {
         progress: _i(j['progress']),
         overdue: j['overdue'] == true,
         comments: _l(j['comments']).map((c) => (by: _s(c['by']), text: _s(c['text']))).toList(),
+        initiativeId: j['initiativeId']?.toString(),
+        devProjectId: j['devProjectId']?.toString(),
+        source: _s(j['source']).isEmpty ? 'task' : _s(j['source']),
+        requestStatus: j['requestStatus']?.toString(),
+        link: j['link']?.toString(),
+        canEdit: j['canEdit'] != false,
+        createdByMe: j['createdByMe'] == true,
       );
+}
+
+/// Which tasks the Tasks tab lists: everyone's (a member only ever gets their own), mine, or the ones I made.
+enum TaskScope {
+  all('all', 'All tasks'),
+  mine('mine', 'My Tasks'),
+  assignedByMe('assigned_by_me', 'Assigned by me');
+
+  const TaskScope(this.wire, this.label);
+  final String wire;
+  final String label;
 }
 
 class TeamTaskList {
@@ -287,7 +391,7 @@ class TeamTaskList {
 }
 
 class TimesheetRow {
-  const TimesheetRow({required this.memberId, required this.name, this.role = '', this.minutes = 0, this.label = '—', this.logs = 0, this.daysLogged = 0, this.byDay = const {}, this.status = ''});
+  const TimesheetRow({required this.memberId, required this.name, this.role = '', this.minutes = 0, this.label = '—', this.logs = 0, this.daysLogged = 0, this.byDay = const {}, this.status = '', this.timeboxMinutes, this.timeboxLabel = ''});
   final String memberId;
   final String name;
   final String role;
@@ -297,6 +401,10 @@ class TimesheetRow {
   final int daysLogged;
   final Map<String, int> byDay;
   final String status;
+
+  /// The hours Timebox counted from the member's punches in the period (null = not linked to Timebox, or Timebox not connected).
+  final int? timeboxMinutes;
+  final String timeboxLabel;
   factory TimesheetRow.fromJson(Map<String, dynamic> j) => TimesheetRow(
         memberId: _s(j['memberId']),
         name: _s(j['name']),
@@ -307,6 +415,8 @@ class TimesheetRow {
         daysLogged: _i(j['daysLogged']),
         byDay: {for (final e in _m(j['byDay']).entries) e.key: _i(e.value)},
         status: _s(j['status']),
+        timeboxMinutes: _in(j['timeboxMinutes']),
+        timeboxLabel: _s(j['timeboxLabel']),
       );
 }
 
@@ -318,24 +428,101 @@ class TimeSplit {
   factory TimeSplit.fromJson(Map<String, dynamic> j) => TimeSplit(group: _s(j['group']), minutes: _i(j['minutes']), pct: _i(j['pct']));
 }
 
+/// Logs & Timesheet → Work Summary: one member's period, from their logs.
+class WorkSummaryRow {
+  const WorkSummaryRow({required this.memberId, required this.name, this.role = '', this.logs = 0, this.minutes = 0, this.completedCount = 0, this.completed = const [], this.pending = '', this.nextPriority = '', this.lastDay});
+  final String memberId, name, role, pending, nextPriority;
+  final int logs, minutes, completedCount;
+  final List<String> completed;
+  final String? lastDay;
+  factory WorkSummaryRow.fromJson(Map<String, dynamic> j) => WorkSummaryRow(
+        memberId: _s(j['memberId']),
+        name: _s(j['name']),
+        role: _s(j['role']),
+        logs: _i(j['logs']),
+        minutes: _i(j['minutes']),
+        completedCount: _i(j['completedCount']),
+        completed: ((j['completed'] as List?) ?? const []).map(_s).toList(),
+        pending: _s(j['pending']),
+        nextPriority: _s(j['nextPriority']),
+        lastDay: j['lastDay']?.toString(),
+      );
+}
+
+/// Logs & Timesheet → Activity Report: the counts per activity, and per group.
+class ActivityReportRow {
+  const ActivityReportRow({required this.metric, this.group = '', this.unitType = 'count', this.total = 0, this.logs = 0, this.members = 0});
+  final String metric, group, unitType;
+  final num total;
+  final int logs, members;
+  bool get isMoney => unitType == 'currency';
+  factory ActivityReportRow.fromJson(Map<String, dynamic> j) => ActivityReportRow(metric: _s(j['metric']), group: _s(j['group']), unitType: _s(j['unitType']).isEmpty ? 'count' : _s(j['unitType']), total: (j['total'] as num?) ?? 0, logs: _i(j['logs']), members: _i(j['members']));
+}
+
 class Timesheet {
-  const Timesheet({this.days = const [], this.totalMinutes = 0, this.totalLabel = '—', this.split = const [], this.rows = const []});
+  const Timesheet({this.days = const [], this.totalMinutes = 0, this.totalLabel = '—', this.split = const [], this.rows = const [], this.workSummary = const [], this.activityReport = const [], this.activityGroups = const [], this.timeboxTotalMinutes, this.timeboxTotalLabel = '', this.timebox = const TimeboxInfo()});
   final List<String> days;
   final int totalMinutes;
   final String totalLabel;
   final List<TimeSplit> split;
   final List<TimesheetRow> rows;
-  factory Timesheet.fromJson(Map<String, dynamic> j) => Timesheet(
-        days: ((j['days'] as List?) ?? const []).map(_s).toList(),
-        totalMinutes: _i(j['totalMinutes']),
-        totalLabel: _s(j['totalLabel']),
-        split: _l(j['split']).map(TimeSplit.fromJson).toList(),
-        rows: _l(j['rows']).map(TimesheetRow.fromJson).toList(),
+  final List<WorkSummaryRow> workSummary;
+  final List<ActivityReportRow> activityReport;
+  final List<({String group, num total, int logs})> activityGroups;
+  final int? timeboxTotalMinutes;
+  final String timeboxTotalLabel;
+  final TimeboxInfo timebox;
+  factory Timesheet.fromJson(Map<String, dynamic> j) {
+    final report = _m(j['activityReport']);
+    return Timesheet(
+      days: ((j['days'] as List?) ?? const []).map(_s).toList(),
+      totalMinutes: _i(j['totalMinutes']),
+      totalLabel: _s(j['totalLabel']),
+      split: _l(j['split']).map(TimeSplit.fromJson).toList(),
+      rows: _l(j['rows']).map(TimesheetRow.fromJson).toList(),
+      workSummary: _l(j['workSummary']).map(WorkSummaryRow.fromJson).toList(),
+      activityReport: _l(report['rows']).map(ActivityReportRow.fromJson).toList(),
+      activityGroups: _l(report['groups']).map((g) => (group: _s(g['group']), total: (g['total'] as num?) ?? 0, logs: _i(g['logs']))).toList(),
+      timeboxTotalMinutes: _in(j['timeboxTotalMinutes']),
+      timeboxTotalLabel: _s(j['timeboxTotalLabel']),
+      timebox: TimeboxInfo.fromJson(_m(j['timebox'])),
+    );
+  }
+}
+
+/// Logs & Timesheet → Daily Logs: one log with everything it says.
+class DailyLogEntry {
+  const DailyLogEntry({required this.item, this.completed = '', this.pending = '', this.nextPriority = '', this.comment = '', this.counts = const []});
+  final TeamFeedItem item;
+  final String completed, pending, nextPriority, comment;
+  final List<({String metric, num value, String details})> counts;
+  factory DailyLogEntry.fromJson(Map<String, dynamic> j) => DailyLogEntry(
+        item: TeamFeedItem.fromJson(j),
+        completed: _s(j['completed']),
+        pending: _s(j['pending']),
+        nextPriority: _s(j['nextPriority']),
+        comment: _s(j['comment']),
+        counts: _l(j['counts']).map((c) => (metric: _s(c['metric']), value: (c['value'] as num?) ?? 0, details: _s(c['details']))).toList(),
       );
 }
 
+class DailyLogs {
+  const DailyLogs({this.total = 0, this.totalMinutes = 0, this.page = 1, this.pageSize = 50, this.items = const []});
+  final int total, totalMinutes, page, pageSize;
+  final List<DailyLogEntry> items;
+  factory DailyLogs.fromJson(Map<String, dynamic> j) => DailyLogs(total: _i(j['total']), totalMinutes: _i(j['totalMinutes']), page: _in(j['page']) ?? 1, pageSize: _in(j['pageSize']) ?? 50, items: _l(j['items']).map(DailyLogEntry.fromJson).toList());
+}
+
+/// One week of a member's trend: their activity rate and, of their tasks due that week, the share completed (null = nothing to measure).
+class MemberWeek {
+  const MemberWeek({required this.week, this.activityPct, this.completion});
+  final int week;
+  final int? activityPct, completion;
+  factory MemberWeek.fromJson(Map<String, dynamic> j) => MemberWeek(week: _i(j['week']), activityPct: _in(j['activityPct']), completion: _in(j['completion']));
+}
+
 class PerformanceRow {
-  const PerformanceRow({required this.memberId, required this.name, this.role = '', this.completion, this.onTime, this.activityRate, this.overall, this.tasks = 0});
+  const PerformanceRow({required this.memberId, required this.name, this.role = '', this.completion, this.onTime, this.activityRate, this.overall, this.tasks = 0, this.leads, this.booked, this.leadToBooking, this.trend = const []});
   final String memberId;
   final String name;
   final String role;
@@ -344,6 +531,11 @@ class PerformanceRow {
   final int? activityRate;
   final int? overall;
   final int tasks;
+
+  /// The CRM leads given to the member's login that arrived in the range, the booked ones, and booked ÷ leads (null = "—").
+  final int? leads, booked;
+  final double? leadToBooking;
+  final List<MemberWeek> trend;
   factory PerformanceRow.fromJson(Map<String, dynamic> j) => PerformanceRow(
         memberId: _s(j['memberId']),
         name: _s(j['name']),
@@ -353,6 +545,10 @@ class PerformanceRow {
         activityRate: _in(j['activityRate']),
         overall: _in(j['overall']),
         tasks: _i(j['tasks']),
+        leads: _in(j['leads']),
+        booked: _in(j['booked']),
+        leadToBooking: _dn(j['leadToBooking']),
+        trend: _l(j['trend']).map(MemberWeek.fromJson).toList(),
       );
 }
 
@@ -366,8 +562,10 @@ class WeekPerformance {
 }
 
 class PerformanceData {
-  const PerformanceData({this.activityRate, this.tasksCompleted = 0, this.onTimeDelivery, this.rows = const [], this.trend = const []});
+  const PerformanceData({this.activityRate, this.tasksCompleted = 0, this.onTimeDelivery, this.leads, this.leadToBooking, this.rows = const [], this.trend = const []});
   final int? activityRate;
+  final int? leads;
+  final double? leadToBooking;
   final int tasksCompleted;
   final int? onTimeDelivery;
   final List<PerformanceRow> rows;
@@ -378,14 +576,36 @@ class PerformanceData {
       activityRate: _in(k['activityRate']),
       tasksCompleted: _i(k['tasksCompleted']),
       onTimeDelivery: _in(k['onTimeDelivery']),
+      leads: _in(k['leads']),
+      leadToBooking: _dn(k['leadToBooking']),
       rows: _l(j['rows']).map(PerformanceRow.fromJson).toList(),
       trend: _l(j['trend']).map(WeekPerformance.fromJson).toList(),
     );
   }
 }
 
+/// Where the team's attendance comes from: Timebox (the company's attendance software, exactly as it records) when it is connected and
+/// answering; otherwise the CRM's own records and the work logs — and the screens say which, with any problem in words.
+class TimeboxInfo {
+  const TimeboxInfo({this.mode = 'off', this.ok = false, this.problem = '', this.linked = 0, this.unlinked = const []});
+  final String mode, problem;
+  final bool ok;
+  final int linked;
+  final List<String> unlinked;
+
+  /// Timebox answered and covers at least one member.
+  bool get live => ok && linked > 0;
+  factory TimeboxInfo.fromJson(Map<String, dynamic> j) => TimeboxInfo(
+        mode: _s(j['mode']).isEmpty ? 'off' : _s(j['mode']),
+        ok: j['ok'] == true,
+        problem: _s(j['problem']),
+        linked: _i(j['linked']),
+        unlinked: ((j['unlinked'] as List?) ?? const []).map(_s).where((x) => x.isNotEmpty).toList(),
+      );
+}
+
 class AttendanceRow {
-  const AttendanceRow({required this.memberId, required this.name, this.role = '', this.checkIn, this.checkOut, this.hours, this.workMode = '', this.state = '', this.status = ''});
+  const AttendanceRow({required this.memberId, required this.name, this.role = '', this.checkIn, this.checkOut, this.hours, this.workMode = '', this.state = '', this.status = '', this.modeSet = false, this.monthRate, this.daysAttended, this.daysExpected, this.self = false, this.source = '', this.stillIn = false, this.timeboxLink = '', this.monthSource = '', this.planTotal, this.planDone});
   final String memberId;
   final String name;
   final String role;
@@ -395,6 +615,26 @@ class AttendanceRow {
   final String workMode;
   final String state;
   final String status;
+
+  /// The member set the day's work mode themselves (or a manager did).
+  final bool modeSet;
+
+  /// Their attendance rate for the month up to the day (null = "—": no HR login and no work mode set).
+  final int? monthRate, daysAttended, daysExpected;
+  final bool self;
+
+  /// Where the day's figures come from: 'timebox' (exact), 'crm' (the CRM's own record), 'logs' (only a work log) or '' (nothing).
+  final String source;
+
+  /// Punched in on Timebox and not out yet.
+  final bool stillIn;
+
+  /// How the member is linked to Timebox: 'login' or 'name' ('' = not linked); and where the month's rate comes from ('timebox' or '').
+  final String timeboxLink, monthSource;
+
+  /// The day's Timebox plan (worklist): items and how many are done (null = none written).
+  final int? planTotal, planDone;
+  bool get fromTimebox => source == 'timebox';
   factory AttendanceRow.fromJson(Map<String, dynamic> j) => AttendanceRow(
         memberId: _s(j['memberId']),
         name: _s(j['name']),
@@ -405,22 +645,40 @@ class AttendanceRow {
         workMode: _s(j['workMode']),
         state: _s(j['state']),
         status: _s(j['status']),
+        modeSet: j['modeSet'] == true,
+        monthRate: _in(j['monthRate']),
+        daysAttended: _in(j['daysAttended']),
+        daysExpected: _in(j['daysExpected']),
+        self: j['self'] == true,
+        source: _s(j['source']),
+        stillIn: j['stillIn'] == true,
+        timeboxLink: _s(j['timeboxLink']),
+        monthSource: _s(j['monthSource']),
+        planTotal: j['plan'] is Map ? _in((j['plan'] as Map)['total']) : null,
+        planDone: j['plan'] is Map ? _in((j['plan'] as Map)['done']) : null,
       );
 }
 
 class AttendanceData {
-  const AttendanceData({this.date = '', this.summary = const AttendanceCounts(), this.rate, this.linked = 0, this.rows = const []});
+  const AttendanceData({this.date = '', this.summary = const AttendanceCounts(), this.rate, this.linked = 0, this.rows = const [], this.canSetOwn = false, this.canSetOthers = false, this.timebox = const TimeboxInfo()});
   final String date;
   final AttendanceCounts summary;
   final int? rate;
   final int linked;
   final List<AttendanceRow> rows;
+
+  /// Whether this viewer may set their own work mode for the day (inside the edit window), or anyone's (a manager).
+  final bool canSetOwn, canSetOthers;
+  final TimeboxInfo timebox;
   factory AttendanceData.fromJson(Map<String, dynamic> j) => AttendanceData(
         date: _s(j['date']),
         summary: AttendanceCounts.fromJson(_m(j['summary'])),
         rate: _in(j['rate']),
         linked: _i(j['linked']),
         rows: _l(j['rows']).map(AttendanceRow.fromJson).toList(),
+        canSetOwn: j['canSetOwn'] == true,
+        canSetOthers: j['canSetOthers'] == true,
+        timebox: TimeboxInfo.fromJson(_m(j['timebox'])),
       );
 }
 
@@ -458,12 +716,22 @@ class LogGroup {
 }
 
 class LogTaskOption {
-  const LogTaskOption({required this.id, required this.title, this.dueDate, this.progress = 0});
+  const LogTaskOption({required this.id, required this.title, this.dueDate, this.progress = 0, this.groupId});
   final String id;
   final String title;
   final String? dueDate;
   final int progress;
-  factory LogTaskOption.fromJson(Map<String, dynamic> j) => LogTaskOption(id: _s(j['id']), title: _s(j['title']), dueDate: j['dueDate']?.toString(), progress: _i(j['progress']));
+  final String? groupId;
+  factory LogTaskOption.fromJson(Map<String, dynamic> j) => LogTaskOption(id: _s(j['id']), title: _s(j['title']), dueDate: j['dueDate']?.toString(), progress: _i(j['progress']), groupId: j['groupId']?.toString());
+}
+
+/// A Socials post a log can publish (planned near the day, not published or cancelled — or the one a log is already tied to).
+class LogPostOption {
+  const LogPostOption({required this.id, required this.title, this.platform = '', this.contentType = '', this.status = '', this.day});
+  final String id, title, platform, contentType, status;
+  final String? day;
+  bool get published => status == 'published';
+  factory LogPostOption.fromJson(Map<String, dynamic> j) => LogPostOption(id: _s(j['id']), title: _s(j['title']), platform: _s(j['platform']), contentType: _s(j['contentType']), status: _s(j['status']), day: j['day']?.toString());
 }
 
 /// A log already saved for the day (for the "my day" list and for editing).
@@ -471,11 +739,12 @@ class SavedLog {
   const SavedLog({
     required this.id, required this.workedOn, this.loggedAt, this.brand = TeamBrand.main, this.kind = ActivityKind.task, this.status = WorkStatus.completed, this.minutes = 0,
     this.projectLabel = '', this.completed = '', this.pending = '', this.nextPriority = '', this.comment = '', this.counts = const {}, this.details = const {}, this.attachments = const [],
-    this.taskId, this.shootId, this.shootStage, this.legacy = false,
+    this.taskId, this.shootId, this.shootStage, this.campaignId, this.initiativeId, this.legacy = false, this.projectId, this.groupId, this.contentId, this.devProjectId,
   });
   final String id;
   final String workedOn;
   final DateTime? loggedAt;
+  final String? projectId, groupId, contentId, devProjectId;
   final TeamBrand brand;
   final ActivityKind kind;
   final WorkStatus status;
@@ -489,7 +758,7 @@ class SavedLog {
   final Map<String, String> details; // metricId → details
   final List<String> attachments;
   final String? taskId;
-  final String? shootId, shootStage;
+  final String? shootId, shootStage, campaignId, initiativeId;
   final bool legacy;
 
   factory SavedLog.fromJson(Map<String, dynamic> j) {
@@ -513,6 +782,12 @@ class SavedLog {
       taskId: j['taskId']?.toString(),
       shootId: j['shootId']?.toString(),
       shootStage: j['shootStage']?.toString(),
+      campaignId: j['campaignId']?.toString(),
+      initiativeId: j['initiativeId']?.toString(),
+      projectId: j['projectId']?.toString(),
+      groupId: j['groupId']?.toString(),
+      contentId: j['contentId']?.toString(),
+      devProjectId: j['devProjectId']?.toString(),
       legacy: j['legacy'] == true,
     );
   }
@@ -521,8 +796,18 @@ class SavedLog {
 class LogSetup {
   const LogSetup({
     this.memberId = '', this.memberName = '', this.self = true, this.canLogForOthers = false, this.members = const [], this.date = '', this.groups = const [], this.tasks = const [],
-    this.projects = const [], this.shoots = const [], this.logs = const [], this.dayMinutes = 0, this.canEdit = true, this.notice = '',
+    this.projects = const [], this.shoots = const [], this.campaigns = const [], this.initiatives = const [], this.devProjects = const [], this.logs = const [], this.dayMinutes = 0, this.canEdit = true, this.notice = '',
+    this.categories = const [], this.posts = const [], this.workMode,
   });
+
+  /// Every activity group a log or a task can count under (the "category"), whether or not the member counts anything in it.
+  final List<({String id, String name})> categories;
+
+  /// The Socials posts a log can publish.
+  final List<LogPostOption> posts;
+
+  /// The work mode the member set for the day (null = not set).
+  final WorkMode? workMode;
   final String memberId;
   final String memberName;
   final bool self;
@@ -535,6 +820,9 @@ class LogSetup {
 
   /// Shoots a log can be tied to (not finished or cancelled, near the day) — the Creative Portfolio's plans.
   final List<({String id, String title, String shootDate})> shoots;
+
+  /// Open campaigns, initiatives and development projects a log or a task can be tied to (Campaigns / Strategies & Developments).
+  final List<({String id, String title})> campaigns, initiatives, devProjects;
   final List<SavedLog> logs;
   final int dayMinutes;
   final bool canEdit;
@@ -553,7 +841,13 @@ class LogSetup {
       tasks: _l(j['tasks']).map(LogTaskOption.fromJson).toList(),
       projects: _l(j['projects']).map((p) => (id: _s(p['id']), name: _s(p['name']))).toList(),
       shoots: _l(j['shoots']).map((p) => (id: _s(p['id']), title: _s(p['title']), shootDate: _s(p['shootDate']))).toList(),
+      campaigns: _l(j['campaigns']).map((p) => (id: _s(p['id']), title: _s(p['title']))).toList(),
+      initiatives: _l(j['initiatives']).map((p) => (id: _s(p['id']), title: _s(p['title']))).toList(),
+      devProjects: _l(j['devProjects']).map((p) => (id: _s(p['id']), title: _s(p['name']))).toList(),
       logs: _l(j['logs']).map(SavedLog.fromJson).toList(),
+      categories: _l(j['categories']).map((c) => (id: _s(c['id']), name: _s(c['name']))).toList(),
+      posts: _l(j['posts']).map(LogPostOption.fromJson).toList(),
+      workMode: WorkMode.parse(j['workMode']?.toString()),
       dayMinutes: _i(_m(j['totals'])['minutes']),
       canEdit: j['canEdit'] != false,
       notice: _s(j['notice']),
@@ -566,8 +860,11 @@ class LogDraft {
   LogDraft({
     this.memberId, required this.entryDate, required this.workedOn, this.projectLabel = '', this.projectId, this.completed = '', this.pending = '', this.nextPriority = '', this.minutes = 0,
     this.status = WorkStatus.completed, this.kind = ActivityKind.task, this.brand = TeamBrand.main, this.comment = '', this.attachments = const [], this.counts = const {}, this.details = const {},
-    this.taskId, this.taskProgress, this.shootId, this.shootStage, this.overrideReason = '',
+    this.taskId, this.taskProgress, this.shootId, this.shootStage, this.campaignId, this.initiativeId, this.overrideReason = '', this.groupId, this.contentId, this.devProjectId,
   });
+
+  /// The category chosen (it wins over the group of the biggest count), the Socials post the work published, the development project.
+  final String? groupId, contentId, devProjectId;
   final String? memberId;
   final String entryDate;
   final String workedOn;
@@ -586,7 +883,7 @@ class LogDraft {
   final Map<String, String> details;
   final String? taskId;
   final int? taskProgress;
-  final String? shootId, shootStage;
+  final String? shootId, shootStage, campaignId, initiativeId;
   final String overrideReason;
 
   Map<String, dynamic> toJson() => {
@@ -608,6 +905,11 @@ class LogDraft {
         'taskId': ?taskId,
         'taskProgress': ?taskProgress,
         'shootId': ?shootId,
+        'campaignId': ?campaignId,
+        'initiativeId': ?initiativeId,
+        'groupId': ?groupId,
+        'contentId': ?contentId,
+        'devProjectId': ?devProjectId,
         if (shootId != null) 'shootStage': ?shootStage,
         if (overrideReason.trim().isNotEmpty) 'overrideReason': overrideReason.trim(),
       };

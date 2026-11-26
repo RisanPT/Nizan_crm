@@ -5,11 +5,16 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
+import 'package:nizan_crm/core/utils/rupees.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
+import 'package:nizan_crm/features/it/domain/task_extension.dart';
 import 'package:nizan_crm/features/it/domain/task_rights.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_common.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/task_cost_widgets.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/task_extension_widgets.dart';
 
 /// Opens the create/edit task sheet. Returns `true` when a task was saved.
 Future<bool?> showTaskEditor(
@@ -95,6 +100,11 @@ Future<bool?> showTaskEditor(
   final title = TextEditingController(text: existing?.title ?? '');
   final desc = TextEditingController(text: existing?.description ?? '');
   final hours = TextEditingController(text: existing == null || existing.estimatedHours == 0 ? '' : existing.estimatedHours.toStringAsFixed(0));
+  // The planned cost: only for those who may set it (the project manager, the owning department's head, an admin) — never for someone
+  // who only reports progress. A task that has sub-tasks has none of its own: it shows the total of its sub-tasks.
+  final canSetCost = !planLocked && (access?.canEditCost ?? false);
+  final isPhase = isEdit && allTasks.any((t) => t.parentTaskId == existing.id);
+  var costInput = TaskCostInput(mode: existing?.costMode ?? '', amount: existing?.costAmount ?? 0, rate: existing?.costRate ?? 0);
   String? assignee = (existing?.assigneeId.isEmpty ?? true) ? null : existing!.assigneeId;
   String? parentId = existing?.parentTaskId ?? defaultParentId;
   ITTicketType ticketType = existing?.ticketType ?? ITTicketType.feature;
@@ -302,6 +312,30 @@ Future<bool?> showTaskEditor(
                   ),
                 ),
                 const SizedBox(height: 14),
+                if (canSetCost) ...[
+                  if (isPhase)
+                    Container(
+                      key: const Key('task_cost_phase'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: crm.background, borderRadius: BorderRadius.circular(10), border: Border.all(color: crm.border)),
+                      child: Text(
+                        'Planned cost: ${rupees(rolledTaskCosts(allTasks)[existing.id] ?? 0)} — the total of its sub-tasks. Give the cost to the sub-tasks.',
+                        style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                      ),
+                    )
+                  else
+                    TaskCostFields(
+                      hours: hours,
+                      initialMode: existing?.costMode ?? '',
+                      initialAmount: existing?.costAmount ?? 0,
+                      initialRate: existing?.costRate ?? 0,
+                      plan: project?.cost?.taskPlan,
+                      existingPlanned: existing?.plannedCost ?? 0,
+                      onChanged: (v) => costInput = v,
+                    ),
+                  const SizedBox(height: 14),
+                ],
                 // Dates row
                 lock(
                   Row(
@@ -394,6 +428,20 @@ Future<bool?> showTaskEditor(
                               messenger.showSnackBar(const SnackBar(content: Text('Due date is before the start date')));
                               return;
                             }
+                            if (canSetCost && !isPhase && costInput.invalid) {
+                              messenger.showSnackBar(const SnackBar(content: Text('The cost has to be an amount')));
+                              return;
+                            }
+                            // Moving the due date of a LATE task later is an extension, however it is done: say why (the server keeps it
+                            // in the task's history).
+                            String? extensionReason;
+                            if (isEdit && !planLocked && deadline != null && existing.dueDate != null && daysBetween(deadline!, existing.dueDate!) > 0) {
+                              final late = existing.overdueDays(DateTime.now());
+                              if (late > 0) {
+                                extensionReason = await askExtensionReason(ctx, from: existing.dueDate!, to: deadline!, overdueDays: late);
+                                if (extensionReason == null) return;
+                              }
+                            }
                             setSheet(() => busy = true);
                             final parentChanged = isEdit && (existing.parentTaskId ?? '') != (parentId ?? '');
                             // Someone who only reports progress sends only progress.
@@ -418,15 +466,44 @@ Future<bool?> showTaskEditor(
                                     'dueDate': deadline?.toIso8601String(),
                                     if (departmentChoices.isNotEmpty) 'departmentName': departmentName,
                                     if (!isEdit || parentChanged) 'order': nextOrder(parentId),
+                                    // what the task costs — sent only by someone who may set it, so a progress update never carries one
+                                    if (canSetCost && !isPhase) ...costInput.toBody(),
+                                    'extensionReason': ?extensionReason,
                                   };
                             try {
                               final svc = ref.read(itTaskServiceProvider);
-                              if (isEdit) {
-                                await svc.updateTask(existing.id, body);
-                              } else {
-                                await svc.createTask(body);
+                              Future<TaskSaveResult> send(Map<String, dynamic> b) => isEdit ? svc.updateTask(existing.id, b) : svc.createTask(b);
+                              TaskSaveResult result;
+                              try {
+                                result = await send(body);
+                              } catch (e) {
+                                // The cost would take the project over its approved budget: nothing was saved. Ask for an increase
+                                // (the project manager) or say who can (everyone else).
+                                final over = OverBudget.tryParse(e);
+                                if (over == null) rethrow;
+                                if (!ctx.mounted) return;
+                                if (!over.canRequest) {
+                                  await showOverBudgetNotice(ctx, over);
+                                  setSheet(() => busy = false);
+                                  return;
+                                }
+                                final ask = await showBudgetIncreaseDialog(ctx, over);
+                                if (ask == null) {
+                                  setSheet(() => busy = false);
+                                  return;
+                                }
+                                result = await send({
+                                  ...body,
+                                  'budgetIncrease': {'reason': ask.reason, 'amount': ask.amount},
+                                });
                               }
                               refreshAllItTaskViews(ref);
+                              if (canSetCost) ref.invalidate(projectsProvider);
+                              if (result.costRequestSent) {
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('Saved. A budget of ${rupees(result.costRequestAmount ?? 0)} was sent to the finance head.')),
+                                );
+                              }
                               if (ctx.mounted) Navigator.pop(ctx, true);
                             } catch (e) {
                               setSheet(() => busy = false);

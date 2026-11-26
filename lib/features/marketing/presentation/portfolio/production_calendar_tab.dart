@@ -15,7 +15,8 @@ enum PcView { month, week, list }
 String _d(DateTime d) => TeamFilter.day(d);
 
 /// Creative Portfolio → Production Calendar. Its entries come from the shoot plans (never typed twice); the stage counts and the donut
-/// move with the work members log against each shoot; crew availability reads the plan's crew and approved leave.
+/// move with the work members log against each shoot; crew availability reads the plan's crew, approved leave and attendance, and counts
+/// the makeup artists too (busy when they are on a client booking that day).
 class ProductionCalendarTab extends ConsumerStatefulWidget {
   const ProductionCalendarTab({super.key});
 
@@ -62,7 +63,7 @@ class _ProductionCalendarTabState extends ConsumerState<ProductionCalendarTab> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               MktKpiRow(minWidth: 180, children: [
-                MktKpiCard(key: const Key('pc_kpi_scheduled'), icon: Icons.event_outlined, value: '${k.total}', label: 'Scheduled Shoots', tint: Mkt.violet),
+                MktKpiCard(key: const Key('pc_kpi_scheduled'), icon: Icons.event_outlined, value: '${k.total}', label: 'Scheduled Shoots', tint: Mkt.primary),
                 MktKpiCard(key: const Key('pc_kpi_production'), icon: Icons.videocam_outlined, value: '${k.inProduction}', label: 'In Production', tint: Mkt.good),
                 MktKpiCard(key: const Key('pc_kpi_post'), icon: Icons.edit_outlined, value: '${k.postProduction}', label: 'In Post-production', tint: Mkt.warn),
                 MktKpiCard(key: const Key('pc_kpi_completed'), icon: Icons.check_circle_outline_rounded, value: '${k.completed}', label: 'Completed', tint: Mkt.blue),
@@ -149,9 +150,9 @@ class _Month extends StatelessWidget {
                   height: 84,
                   margin: const EdgeInsets.all(1.5),
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: inMonth ? Mkt.card : Mkt.bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: key == today ? Mkt.violet : Mkt.border)),
+                  decoration: BoxDecoration(color: inMonth ? Mkt.card : Mkt.bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: key == today ? Mkt.primary : Mkt.border)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('${day.day}', style: mktText(10.5, weight: key == today ? FontWeight.w800 : FontWeight.w500, color: key == today ? Mkt.violet : (inMonth ? Mkt.ink : Mkt.inkSoft))),
+                    Text('${day.day}', style: mktText(10.5, weight: key == today ? FontWeight.w800 : FontWeight.w500, color: key == today ? Mkt.primary : (inMonth ? Mkt.ink : Mkt.inkSoft))),
                     const SizedBox(height: 2),
                     for (final s in list.take(2)) _Chip(s: s),
                     if (list.length > 2) Text('+${list.length - 2} more', style: mktText(9.5, color: Mkt.inkSoft)),
@@ -293,18 +294,29 @@ class _Availability extends StatelessWidget {
         subtitle: c.day.isEmpty ? null : shootDay(c.day, pattern: 'EEE d MMM'),
         icon: Icons.groups_2_outlined,
         child: c.availability.isEmpty
-            ? const MktEmpty('No team members are set up.', icon: Icons.groups_2_outlined, height: 90)
+            ? const MktEmpty('No team members or makeup artists are set up.', icon: Icons.groups_2_outlined, height: 90)
             : Column(children: [
                 for (final r in c.availability)
                   Padding(
                     key: Key('pc_role_${r.role}'),
                     padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(children: [
-                      SizedBox(width: 130, child: Text(r.role, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700))),
-                      Expanded(child: MktProgress(pct: r.total == 0 ? 0 : (r.available * 100 / r.total).round(), color: r.available == 0 ? Mkt.bad : Mkt.good, showLabel: false)),
-                      const SizedBox(width: 10),
-                      Text('${r.available} / ${r.total} Available', style: mktText(11.5, weight: FontWeight.w700)),
-                      if (r.onLeave > 0) Padding(padding: const EdgeInsets.only(left: 6), child: MktChip('${r.onLeave} on leave', color: Mkt.blue)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        SizedBox(width: 130, child: Text(r.role, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700))),
+                        Expanded(child: MktProgress(pct: r.total == 0 ? 0 : (r.available * 100 / r.total).round(), color: r.available == 0 ? Mkt.bad : Mkt.good, showLabel: false)),
+                        const SizedBox(width: 10),
+                        Text('${r.available} / ${r.total} Available', style: mktText(11.5, weight: FontWeight.w700)),
+                      ]),
+                      if (r.booked + r.onWork + r.onLeave + r.absent > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 130),
+                          child: Wrap(spacing: 6, runSpacing: 4, children: [
+                            if (r.booked > 0) MktChip('${r.booked} on a shoot', color: Mkt.primaryLight),
+                            if (r.onWork > 0) MktChip('${r.onWork} on a client work', color: Mkt.warn),
+                            if (r.onLeave > 0) MktChip('${r.onLeave} on leave', color: Mkt.blue),
+                            if (r.absent > 0) MktChip('${r.absent} absent', color: Mkt.bad),
+                          ]),
+                        ),
                     ]),
                   ),
               ]),

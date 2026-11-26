@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/presentation/team/log_activity_sheet.dart';
 import 'package:nizan_crm/features/marketing/presentation/team/team_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
-/// Team Dashboard → Team Activity: the live feed of everybody's logs, newest first, with Today's Summary counted from the same logs.
+/// The Team Activity tab's views: the live feed, or the period read By Member / By Project / By Category.
+enum ActivityView { feed, member, project, category }
+
+/// Team Dashboard → Team Activity: the live feed of everybody's logs, newest first, with Today's Summary — and the same logs By Member,
+/// By Project and By Category. Every cut is made on the server (kind, and the row a view was tapped for), so nothing is missed past the
+/// first page; tapping a row of a view shows that row's logs in the feed.
 class TeamActivityTab extends ConsumerStatefulWidget {
   const TeamActivityTab({super.key});
 
@@ -17,18 +23,32 @@ class TeamActivityTab extends ConsumerStatefulWidget {
 }
 
 class _TeamActivityTabState extends ConsumerState<TeamActivityTab> {
-  ActivityKind? _kind;
+  ActivityView _view = ActivityView.feed;
+
+  void _setQuery(ActivityQuery q) => ref.read(teamActivityQueryProvider.notifier).state = q;
+
+  /// A row of a view was tapped: the feed shows its logs.
+  void _narrow(ActivityView view, ActivityViewRow r) {
+    final kind = ref.read(teamActivityQueryProvider).kind;
+    _setQuery(switch (view) {
+      ActivityView.member => ActivityQuery(kind: kind, memberId: r.key, label: r.label),
+      ActivityView.project => ActivityQuery(kind: kind, project: r.key, label: r.label),
+      _ => ActivityQuery(kind: kind, group: r.key, label: r.label),
+    });
+    setState(() => _view = ActivityView.feed);
+  }
 
   @override
   Widget build(BuildContext context) {
     final feed = ref.watch(teamActivityProvider);
+    final q = ref.watch(teamActivityQueryProvider);
     return RefreshIndicator(
       onRefresh: () async => refreshTeam(ref),
       child: feed.when(
         loading: () => ListView(children: const [SizedBox(height: 200), Center(child: CircularProgressIndicator())]),
         error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => refreshTeam(ref))]),
         data: (d) {
-          final items = _kind == null ? d.items : d.items.where((a) => a.kind == _kind).toList();
+          final items = d.items;
           final s = d.summary;
           final summary = MktCard(
             title: "Today's Summary",
@@ -37,42 +57,62 @@ class _TeamActivityTabState extends ConsumerState<TeamActivityTab> {
             child: Column(
               key: const Key('team_activity_summary'),
               children: [
-                _line('Activities logged', '${s.logged}', Icons.edit_note_rounded, Mkt.violet),
+                _line('Activities logged', '${s.logged}', Icons.edit_note_rounded, Mkt.primary),
                 _line('Completed', '${s.completed}', Icons.check_circle_outline_rounded, Mkt.good),
                 _line('In progress', '${s.inProgress}', Icons.timelapse_rounded, Mkt.blue),
-                _line('Meetings', '${s.meetings}', Icons.groups_2_outlined, Mkt.violet2),
+                _line('Meetings', '${s.meetings}', Icons.groups_2_outlined, Mkt.primaryLight),
                 _line('Time logged', hoursLabel(s.minutes), Icons.schedule_rounded, Mkt.warn),
               ],
             ),
           );
-          final list = MktCard(
-            title: 'Live Feed',
-            subtitle: '${d.total} log${d.total == 1 ? '' : 's'} in this period',
-            icon: Icons.bolt_outlined,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      MktFilterChip(key: const Key('team_kind_all'), label: 'All', selected: _kind == null, onTap: () => setState(() => _kind = null)),
-                      for (final k in ActivityKind.values)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: MktFilterChip(key: Key('team_kind_${k.wire}'), label: k.label, selected: _kind == k, onTap: () => setState(() => _kind = _kind == k ? null : k)),
-                        ),
-                    ],
+          final views = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final v in const [(ActivityView.feed, 'Live Feed'), (ActivityView.member, 'By Member'), (ActivityView.project, 'By Project'), (ActivityView.category, 'By Category')])
+                Padding(padding: const EdgeInsets.only(right: 6), child: MktFilterChip(key: Key('team_view_${v.$1.name}'), label: v.$2, selected: _view == v.$1, onTap: () => setState(() => _view = v.$1))),
+            ]),
+          );
+          final Widget body = switch (_view) {
+            ActivityView.feed => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        MktFilterChip(key: const Key('team_kind_all'), label: 'All', selected: q.kind == null, onTap: () => _setQuery(q.withKind(null))),
+                        for (final k in ActivityKind.values)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: MktFilterChip(key: Key('team_kind_${k.wire}'), label: k.label, selected: q.kind == k, onTap: () => _setQuery(q.withKind(q.kind == k ? null : k))),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                if (items.isEmpty) const MktEmpty('Nothing has been logged here yet.', icon: Icons.history_toggle_off_rounded),
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, color: Mkt.border),
-                  _FeedRow(item: items[i]),
+                  if (q.narrowed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: InputChip(key: const Key('team_activity_narrowed'), label: Text('Showing: ${q.label}'), deleteIcon: const Icon(Icons.close_rounded, key: Key('team_activity_narrowed_clear'), size: 16), onDeleted: () => _setQuery(q.cleared)),
+                    ),
+                  const SizedBox(height: 10),
+                  if (items.isEmpty) const MktEmpty('Nothing has been logged here yet.', icon: Icons.history_toggle_off_rounded),
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, color: Mkt.border),
+                    _FeedRow(item: items[i]),
+                  ],
+                  if (d.total > items.length) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Showing the newest ${items.length} of ${d.total} — export for all of them.', style: mktText(11, color: Mkt.inkSoft))),
                 ],
-              ],
-            ),
+              ),
+            ActivityView.member => _ViewTable(keyPrefix: 'team_by_member', first: 'Member', rows: d.byMember, onTap: (r) => _narrow(ActivityView.member, r)),
+            ActivityView.project => _ViewTable(keyPrefix: 'team_by_project', first: 'Project / client', rows: d.byProject, onTap: (r) => _narrow(ActivityView.project, r)),
+            ActivityView.category => _ViewTable(keyPrefix: 'team_by_category', first: 'Category', rows: d.byCategory, onTap: (r) => _narrow(ActivityView.category, r)),
+          };
+          final list = MktCard(
+            title: switch (_view) { ActivityView.feed => 'Live Feed', ActivityView.member => 'By Member', ActivityView.project => 'By Project', ActivityView.category => 'By Category' },
+            subtitle: _view == ActivityView.feed ? '${d.total} log${d.total == 1 ? '' : 's'}${q.narrowed || q.kind != null ? ' match' : ' in this period'}' : 'The whole period · tap a row to see its logs',
+            icon: Icons.bolt_outlined,
+            trailing: TextButton.icon(key: const Key('team_activity_export'), onPressed: () => _export(d), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Export')),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [views, const SizedBox(height: 10), body]),
           );
           return LayoutBuilder(
             builder: (context, box) {
@@ -104,6 +144,21 @@ class _TeamActivityTabState extends ConsumerState<TeamActivityTab> {
     );
   }
 
+  /// The view on screen as a CSV: the feed's logs (all of them, up to 500), or the rows of the view.
+  Future<void> _export(TeamActivityFeed d) async {
+    try {
+      if (_view == ActivityView.feed) {
+        final all = d.total > d.items.length ? await ref.read(marketingTeamServiceProvider).activity(ref.read(teamFilterProvider), q: ref.read(teamActivityQueryProvider), limit: 500) : d;
+        await downloadCsv('marketing-team-activity.csv', activityFeedCsv(all.items));
+      } else {
+        final rows = switch (_view) { ActivityView.member => d.byMember, ActivityView.project => d.byProject, _ => d.byCategory };
+        await downloadCsv('marketing-team-activity-${_view.name}.csv', activityViewCsv(_view == ActivityView.member ? 'Member' : _view == ActivityView.project ? 'Project / client' : 'Category', rows));
+      }
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+
   Widget _line(String label, String value, IconData icon, Color color) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
@@ -120,6 +175,48 @@ class _TeamActivityTabState extends ConsumerState<TeamActivityTab> {
       ],
     ),
   );
+}
+
+/// The feed's rows for a CSV (pure, so it can be checked).
+List<List<Object?>> activityFeedCsv(List<TeamFeedItem> items) => [
+      ['Date', 'Time', 'Member', 'Worked on', 'Project / client', 'Kind', 'Category', 'Brand', 'Status', 'Minutes'],
+      for (final a in items) [a.day, timeOf(a.at), a.member, a.workedOn, a.projectLabel, a.kind.label, a.group.isEmpty ? 'Others' : a.group, a.brand.label, a.status.label, a.minutes],
+    ];
+
+/// A view's rows for a CSV.
+List<List<Object?>> activityViewCsv(String first, List<ActivityViewRow> rows) => [
+      [first, 'Logs', 'Hours', 'Completed'],
+      for (final r in rows) [r.label, r.logs, (r.minutes / 60).toStringAsFixed(2), r.completed],
+    ];
+
+/// One of the By Member / By Project / By Category tables: logs, time and completed per row, the most logs first.
+class _ViewTable extends StatelessWidget {
+  const _ViewTable({required this.keyPrefix, required this.first, required this.rows, required this.onTap});
+  final String keyPrefix, first;
+  final List<ActivityViewRow> rows;
+  final ValueChanged<ActivityViewRow> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return const MktEmpty('Nothing has been logged in this period.', icon: Icons.history_toggle_off_rounded);
+    final most = rows.fold<int>(0, (m, r) => r.logs > m ? r.logs : m);
+    return MktTable(
+      key: Key(keyPrefix),
+      minWidth: 420,
+      rowKeys: [for (final r in rows) Key('${keyPrefix}_${r.key}')],
+      onRowTap: (i) => onTap(rows[i]),
+      columns: [MktCol(first, flex: 5), const MktCol('Logs', flex: 3), const MktCol('Time', width: 70), const MktCol('Done', width: 50, align: Alignment.centerRight)],
+      rows: [
+        for (final r in rows)
+          [
+            Text(r.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700)),
+            Padding(padding: const EdgeInsets.only(right: 10), child: Row(children: [Expanded(child: MktProgress(pct: most == 0 ? 0 : (r.logs * 100 / most).round(), color: Mkt.primaryLight, showLabel: false)), const SizedBox(width: 6), Text('${r.logs}', style: mktText(12, weight: FontWeight.w700))])),
+            Text(hoursLabel(r.minutes), style: mktText(12)),
+            Text('${r.completed}', style: mktText(12, weight: FontWeight.w700)),
+          ],
+      ],
+    );
+  }
 }
 
 class _FeedRow extends StatelessWidget {

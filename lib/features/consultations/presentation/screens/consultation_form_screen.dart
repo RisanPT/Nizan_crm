@@ -44,6 +44,11 @@ class ConsultationFormScreen extends ConsumerStatefulWidget {
 const _quickTimes = [(10, 0), (11, 0), (12, 0), (14, 0), (15, 0), (16, 0), (17, 0), (18, 0)];
 const _quickDurations = [15, 30, 45, 60, 90];
 
+/// From this much room the summary (with the Schedule button) sits beside the form; below it, a bar under the form. 860 keeps a
+/// landscape iPad Air / Pro 11 (about 880 next to the sidebar) side by side, with the form still about 540 wide.
+const double _wideAt = 860;
+const double _summaryWidth = 320;
+
 class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen> {
   late String? _clientId = widget.clientId;
   bool get _clientFixed => widget.clientId != null;
@@ -205,52 +210,51 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
         ),
     ];
 
-    return Scaffold(
-      backgroundColor: crm.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/consultations'),
+    // ONE width decides both the side summary and the bottom bar: the space this screen gets — inside the app's sidebar on a
+    // tablet or desktop — not the window's. (An iPad in landscape is wider than the cut-over but leaves the form less than that
+    // next to the sidebar: deciding the two from different widths showed neither, and there was no Schedule button at all.)
+    return LayoutBuilder(builder: (context, box) {
+      final wide = box.maxWidth >= _wideAt;
+      final form = ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          for (final s in sections) ...[s, const SizedBox(height: 16)],
+        ],
+      );
+      return Scaffold(
+        backgroundColor: crm.background,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/consultations'),
+          ),
+          title: const Text('Schedule call'),
         ),
-        title: const Text('Schedule call'),
-      ),
-      body: LayoutBuilder(
-        builder: (context, box) {
-          final wide = box.maxWidth >= 900;
-          final form = ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            children: [
-              for (final s in sections) ...[s, const SizedBox(height: 16)],
-            ],
-          );
-          if (!wide) {
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 680), child: form),
-            );
-          }
-          return Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1080),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: form),
-                  SizedBox(
-                    width: 340,
-                    child: Padding(padding: const EdgeInsets.fromLTRB(0, 16, 16, 16), child: summary),
+        body: !wide
+            ? Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 680), child: form),
+              )
+            : Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1080),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: form),
+                      SizedBox(
+                        width: _summaryWidth,
+                        child: Padding(padding: const EdgeInsets.fromLTRB(0, 16, 16, 16), child: summary),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          );
-        },
-      ),
-      // Wide screens show the summary beside the form instead.
-      bottomNavigationBar:
-          MediaQuery.sizeOf(context).width >= 900 ? null : SafeArea(top: false, child: summary.compact(context)),
-    );
+        // Wide: the summary sits beside the form instead.
+        bottomNavigationBar: wide ? null : SafeArea(top: false, child: summary.compact(context)),
+      );
+    });
   }
 
   String _nextCallLabel(StylistClient c) {

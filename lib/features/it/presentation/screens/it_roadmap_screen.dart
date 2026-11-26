@@ -16,7 +16,7 @@ enum ITRoadmapViewMode {
   spreadsheet;
 
   String get label => switch (this) {
-        ITRoadmapViewMode.timeline => 'Timeline (Gantt)',
+        ITRoadmapViewMode.timeline => 'Timeline (Gratt)',
         ITRoadmapViewMode.spreadsheet => 'Spreadsheet (Grid)',
       };
 

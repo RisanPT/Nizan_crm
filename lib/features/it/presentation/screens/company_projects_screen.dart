@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
+import 'package:nizan_crm/core/widgets/employee_multi_picker.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/providers/my_department_provider.dart';
@@ -14,6 +15,9 @@ import 'package:nizan_crm/features/it/services/strategic_vision_service.dart';
 import 'package:nizan_crm/features/org/data/department.dart';
 import 'package:nizan_crm/features/org/services/department_service.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
+import 'package:nizan_crm/features/it/domain/horizon_for_dates.dart';
+import 'package:nizan_crm/features/it/domain/project_phases.dart';
+import 'package:nizan_crm/features/it/domain/models/strategic_vision_model.dart' show StrategicHorizon;
 import 'package:nizan_crm/features/it/domain/project_tier.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
@@ -24,6 +28,7 @@ import 'package:nizan_crm/features/it/presentation/screens/widgets/it_okr_view.d
 import 'package:nizan_crm/features/it/presentation/screens/widgets/monthly_objectives_view.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_cost_widgets.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_departments.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/project_people.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/strategic_roadmap_view.dart';
 
 String _titleCase(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).replaceAll('-', ' ');
@@ -1604,16 +1609,20 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     // department's head approves it, and the proposer manages it meanwhile.
     final proposing = !isEdit && !leadership && !access.isDepartmentHead;
     // Heads create only for their own department; moving a project away is an admin's call.
-    final lockDept = isEdit ? !leadership : (access.isDepartmentHead && !leadership);
+    // (a head whose department the app does not know yet picks it — the server still files it under their own)
+    final lockDept = isEdit ? !leadership : (access.isDepartmentHead && !leadership && myDept.isNotEmpty);
     final waitingForApproval = existing?.isProposed ?? false;
 
     final name = TextEditingController(text: existing?.name ?? '');
     final desc = TextEditingController(text: existing?.description ?? '');
     String? managerId = (existing?.managerId.isEmpty ?? true) ? null : existing!.managerId;
-    final selectedMembers = <String>{...(existing?.memberIds ?? const [])};
+    // (the manager is not also listed as a member)
+    final selectedMembers = <String>{...(existing?.memberIds ?? const []).where((id) => id.isNotEmpty && id != managerId)};
     String department = existing?.targetDepartment.isNotEmpty == true
         ? existing!.targetDepartment
-        : (lockDept && myDept.isNotEmpty ? myDept : (_dept != 'all' ? _dept : (deptNames.isNotEmpty ? deptNames.first : 'General')));
+        // a new project starts with NO owning department (not simply the first in the list): a head gets their own, a list filtered
+        // to one department starts with that one, everyone else picks
+        : (lockDept ? myDept : (_dept != 'all' ? _dept : ''));
     // The other departments on the project (the owner is `department`).
     final selectedDepts = <String>{
       for (final d in existing?.departments ?? const <ProjectDepartment>[])
@@ -1626,7 +1635,8 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     var costMissing = false;
     String status = existing?.status ?? 'planning';
     String priority = existing?.priority ?? 'medium';
-    String phase = existing?.phase ?? 'discovery';
+    // The phases depend on the owning department (IT: Discovery…, Marketing: Research…, the rest: Initiation…).
+    String phase = fitPhase(existing?.phase ?? '', department);
     int horizonNumber = existing?.horizonNumber ?? 1;
     String strategicPillar = (existing?.strategicPillar.isNotEmpty ?? false) ? existing!.strategicPillar : 'expansion';
     final targetYearCtrl = TextEditingController(text: existing?.targetYear != null ? existing!.targetYear.toString() : '');
@@ -1637,6 +1647,16 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
       endDate = kDurationPresets.firstWhere((x) => x.label == preset).endFor(startDate);
     }
     final hadEndDate = existing?.endDate != null;
+    // The strategic wave and the target year follow the dates (the year the project lands) until someone picks them by hand.
+    List<StrategicHorizon> waves() => ref.read(strategicVisionProvider).value?.horizons ?? const [];
+    var waveTouched = false;
+    var waveAuto = false; // the wave shown was set from the dates (a note says so)
+    var targetTouched = existing?.targetYear != null;
+    if (existing == null) {
+      horizonNumber = horizonForDates(start: startDate, end: endDate, horizons: waves());
+      waveAuto = true;
+      if (endDate != null) targetYearCtrl.text = '${endDate.year}';
+    }
     final tierBefore = existing == null ? null : timelineOf(existing).tier;
     final messenger = ScaffoldMessenger.of(context);
 
@@ -1646,20 +1666,27 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
       builder: (ctx) {
         var busy = false;
         return StatefulBuilder(
-          builder: (ctx, setSheet) {
+          // (a Consumer: the staff list may still be loading when the form opens — the pickers fill in once it arrives)
+          builder: (ctx, setSheet) => Consumer(builder: (ctx, cref, _) {
             final crm = ctx.crmColors;
-            final employees = ref.read(departmentEmployeesProvider(department));
+            // nobody to pick as manager until the owning department is chosen (an empty name would mean everyone)
+            final employees = department.isEmpty ? const <Employee>[] : cref.watch(departmentEmployeesProvider(department));
             // The team can come from every department on the project.
-            final pool = <String, Employee>{
-              for (final dn in [department, ...selectedDepts])
-                for (final e in ref.read(departmentEmployeesProvider(dn))) e.id: e,
-            }.values.toList()
-              ..sort((a, b) => a.name.compareTo(b.name));
+            final pool = projectPeoplePool((d) => cref.watch(departmentEmployeesProvider(d)), [department, ...selectedDepts]);
 
             final timeline = timelineFor(start: startDate, end: endDate);
             final badRange = endDate != null && endDate!.isBefore(startDate);
             // A mini project is not placed on the strategic roadmap, so its wave / pillar are not asked.
             final showStrategic = timeline.tier != ProjectTier.mini;
+
+            // dates picked → the wave and the target year follow them (unless picked by hand)
+            void syncWave() {
+              if (!waveTouched) {
+                horizonNumber = horizonForDates(start: startDate, end: endDate, horizons: waves());
+                waveAuto = true;
+              }
+              if (!targetTouched && endDate != null) targetYearCtrl.text = '${endDate!.year}';
+            }
 
             Future<void> pickDate({required bool start}) async {
               final picked = await showDatePicker(
@@ -1679,6 +1706,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                 } else {
                   endDate = day;
                 }
+                syncWave();
               });
             }
 
@@ -1707,7 +1735,10 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                     tierBefore: tierBefore,
                     onPickStart: () => pickDate(start: true),
                     onPickEnd: () => pickDate(start: false),
-                    onPreset: (preset) => setSheet(() => endDate = preset.endFor(startDate)),
+                    onPreset: (preset) => setSheet(() {
+                      endDate = preset.endFor(startDate);
+                      syncWave();
+                    }),
                   ),
                   const SizedBox(height: 14),
                   if (!isEdit)
@@ -1739,17 +1770,20 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                   const SizedBox(height: 14),
                   // Owning department
                   DropdownButtonFormField<String>(
+                    key: const Key('form_owner_dept'),
                     initialValue: deptNames.contains(department) ? department : null,
+                    hint: const Text('Pick a department'),
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Owning department *', helperText: 'Accountable for the project; its head approves proposals'),
                     items: [
-                      if (!deptNames.contains(department)) DropdownMenuItem(value: department, child: Text(department)),
+                      if (department.isNotEmpty && !deptNames.contains(department)) DropdownMenuItem(value: department, child: Text(department)),
                       for (final d in deptNames) DropdownMenuItem(value: d, child: Text(d)),
                     ],
                     onChanged: lockDept
                         ? null
                         : (v) => setSheet(() {
                               department = v ?? department;
+                              phase = fitPhase(phase, department); // its phases follow the department
                               selectedDepts.removeWhere((d) => d.toLowerCase() == department.toLowerCase());
                               // reset people who are no longer on the project's departments
                               final ids = {
@@ -1795,26 +1829,33 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                       selectedName: existing?.managerName,
                       label: 'Project Head / Manager *',
                       allowUnassign: false,
-                      onChanged: (e) => setSheet(() => managerId = e?.id),
+                      onChanged: (e) => setSheet(() {
+                        managerId = e?.id;
+                        if (managerId != null) selectedMembers.remove(managerId);
+                      }),
                     ),
                     if (employees.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text('No active staff found for "$department". Pick another department or tag staff to it.',
-                            style: TextStyle(fontSize: 11.5, color: Colors.orange.shade800)),
+                        child: Text(
+                            department.isEmpty
+                                ? 'Pick the owning department first — its people are the ones who can manage the project.'
+                                : 'No active staff found for "$department". Pick another department or tag staff to it.',
+                            key: const Key('form_manager_note'),
+                            style: TextStyle(fontSize: 11.5, color: department.isEmpty ? crm.textSecondary : Colors.orange.shade800)),
                       ),
                   ],
                   const SizedBox(height: 12),
-                  Text('Team members', style: TextStyle(fontSize: 12.5, color: crm.textSecondary, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 6, runSpacing: 6, children: [
-                    for (final e in pool)
-                      FilterChip(
-                        label: Text(e.name, style: const TextStyle(fontSize: 12)),
-                        selected: selectedMembers.contains(e.id),
-                        onSelected: (v) => setSheet(() => v ? selectedMembers.add(e.id) : selectedMembers.remove(e.id)),
-                      ),
-                  ]),
+                  // searchable; people already on the team who are no longer in the pool still show (and can be removed)
+                  EmployeeMultiPickerField(
+                    employees: [for (final e in pool) if (e.id != managerId) e],
+                    selectedIds: selectedMembers,
+                    knownNames: existing == null ? const {} : memberNamesOf(existing),
+                    helper: teamPoolNote(department, selectedDepts),
+                    onChanged: (v) => setSheet(() => selectedMembers
+                      ..clear()
+                      ..addAll(v)),
+                  ),
                   const SizedBox(height: 14),
                   Text('Who can change the plan', style: TextStyle(fontSize: 12.5, color: crm.textSecondary, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
@@ -1856,7 +1897,27 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                     Expanded(child: _dd('Priority', priority, const ['low', 'medium', 'high', 'critical'], (v) => setSheet(() => priority = v))),
                   ]),
                   const SizedBox(height: 10),
-                  _dd('Phase', phase, const ['discovery', 'design', 'development', 'testing', 'deployment', 'maintenance'], (v) => setSheet(() => phase = v)),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('phase_$department'), // a new list when the department changes
+                    initialValue: phase,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: 'Phase', helperText: 'Steps for $department: ${phasePath(department)}', helperMaxLines: 2),
+                    selectedItemBuilder: (_) => [for (final o in phasesForDepartment(department)) Text(phaseLabel(o), overflow: TextOverflow.ellipsis)],
+                    items: [
+                      for (final o in phasesForDepartment(department))
+                        DropdownMenuItem(
+                          value: o,
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: phaseLabel(o)),
+                              if (kPhaseMeaning[o] != null) TextSpan(text: '  ·  ${kPhaseMeaning[o]}', style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                            ]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setSheet(() => phase = v ?? phase),
+                  ),
                   if (showStrategic) ...[
                   const SizedBox(height: 14),
                   Container(
@@ -1875,6 +1936,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                       ]),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<int>(
+                        key: ValueKey('wave_$horizonNumber'), // rebuilt when the dates move the wave
                         initialValue: horizonNumber,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Strategic Horizon Wave'),
@@ -1891,8 +1953,21 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                             DropdownMenuItem(value: 3, child: Text('Horizon 3: Transformation Wave')),
                           ],
                         ],
-                        onChanged: (v) => setSheet(() => horizonNumber = v ?? 1),
+                        onChanged: (v) => setSheet(() {
+                          horizonNumber = v ?? 1;
+                          waveTouched = true;
+                          waveAuto = false;
+                        }),
                       ),
+                      if (waveAuto)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, left: 4),
+                          child: Text(
+                            'Set from the ${endDate != null ? 'end' : 'start'} date (${(endDate ?? startDate).year}) — change it if needed.',
+                            key: const Key('wave_auto_note'),
+                            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                          ),
+                        ),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         initialValue: (ref.read(strategicVisionProvider).value?.pillars.any((p) => p.id == strategicPillar) ?? false)
@@ -1919,6 +1994,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: targetYearCtrl,
+                        onChanged: (_) => targetTouched = true, // typed by hand: the dates no longer change it
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Target Completion Year (e.g. 2028)',
@@ -1935,6 +2011,10 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                       onPressed: busy
                           ? null
                           : () async {
+                              if (department.trim().isEmpty) {
+                                messenger.showSnackBar(const SnackBar(content: Text('Pick the owning department')));
+                                return;
+                              }
                               if (name.text.trim().isEmpty) {
                                 messenger.showSnackBar(const SnackBar(content: Text('Project name is required')));
                                 return;
@@ -1959,7 +2039,8 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                               }
                               setSheet(() => busy = true);
                               try {
-                                final result = await ref.read(projectServiceProvider).saveProject({
+                                // (taking someone off who still has work on the project asks first — see saveTeamChecked)
+                                final result = await saveTeamChecked(ctx, (extra) => ref.read(projectServiceProvider).saveProject({
                                   'name': name.text.trim(),
                                   'description': desc.text.trim(),
                                   'targetDepartment': department,
@@ -1982,7 +2063,12 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                                     if (int.tryParse(targetYearCtrl.text.trim()) != null)
                                       'targetYear': int.parse(targetYearCtrl.text.trim()),
                                   },
-                                }, id: existing?.id);
+                                  ...extra,
+                                }, id: existing?.id));
+                                if (result == null) {
+                                  setSheet(() => busy = false); // kept them on: nothing was saved
+                                  return;
+                                }
                                 if (ctx.mounted) Navigator.pop(ctx, result);
                               } catch (e) {
                                 setSheet(() => busy = false);
@@ -1995,7 +2081,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                 ]),
               ),
             );
-          },
+          }),
         );
       },
     );

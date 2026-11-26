@@ -16,15 +16,19 @@ class LeadPriority {
       Color(0xFFEF4444), 'Ready to book — act today');
   static const warm = LeadPriority('Warm', 'Warm', Icons.wb_sunny_outlined,
       Color(0xFFF59E0B), 'Interested — keep following up');
+  static const nurture = LeadPriority('Nurture', 'Nurture', Icons.spa_outlined,
+      Color(0xFF14B8A6), 'Interested, but a long way off — keep in touch');
   static const cold = LeadPriority('Cold', 'Cold', Icons.ac_unit,
       Color(0xFF3B82F6), 'Just enquiring — low intent');
 
-  static const all = [hot, warm, cold];
+  static const all = [hot, warm, nurture, cold];
 
   static LeadPriority of(String? raw) {
     switch ((raw ?? '').trim().toLowerCase()) {
       case 'hot':
         return hot;
+      case 'nurture':
+        return nurture;
       case 'cold':
         return cold;
       default:
@@ -70,7 +74,7 @@ class LeadPriorityChip extends StatelessWidget {
   }
 }
 
-/// Segmented Hot / Warm / Cold selector for forms — one tap, no dropdown.
+/// Segmented Hot / Warm / Nurture / Cold selector for forms — one tap, no dropdown.
 class LeadPrioritySelector extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;

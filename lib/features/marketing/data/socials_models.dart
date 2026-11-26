@@ -1,9 +1,13 @@
+import 'package:nizan_crm/features/marketing/data/work_review.dart';
+export 'package:nizan_crm/features/marketing/data/work_review.dart';
+
 // The Socials module's payloads (backend controllers/marketingSocialsController.js).
 
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
 int? _in(dynamic v) => (v as num?)?.toInt();
 double? _dn(dynamic v) => (v as num?)?.toDouble();
 String _s(dynamic v) => v?.toString() ?? '';
+String? _sn(dynamic v) => v == null || v.toString().isEmpty ? null : v.toString();
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.tryParse(v.toString())?.toLocal();
 Map<String, dynamic> _m(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 List<Map<String, dynamic>> _l(dynamic v) => ((v as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -69,11 +73,19 @@ class TrackerRow {
 
 /// One post in a calendar cell, the publishing queue or the recent list.
 class SocialPost {
-  const SocialPost({required this.id, required this.title, this.platform = 'instagram', this.contentType = 'reel', this.status = 'idea', this.brand = 'main', this.scheduledDate, this.publishedDate, this.thumbUrl = '', this.permalink = '', this.assignedToName = '', this.views = 0, this.caption = '', this.campaign = '', this.metrics = const {}});
+  const SocialPost({required this.id, required this.title, this.platform = 'instagram', this.contentType = 'reel', this.status = 'idea', this.brand = 'main', this.scheduledDate, this.publishedDate, this.thumbUrl = '', this.permalink = '', this.assignedToName = '', this.views = 0, this.caption = '', this.campaign = '', this.metrics = const {}, this.assetId, this.shootId, this.metricsSource = '', this.metricsSyncedAt});
   final String id, title, platform, contentType, status, brand, thumbUrl, permalink, assignedToName, caption, campaign;
+
+  /// The approved asset the post is made from, and the shoot it belongs to (the asset's shoot — the server decides).
+  final String? assetId, shootId;
   final Map<String, int> metrics;
   final DateTime? scheduledDate, publishedDate;
   final int views;
+
+  /// 'instagram' = the figures come from the Instagram sync and are replaced at each sync (impressions, reposts and link clicks stay as typed).
+  final String metricsSource;
+  final DateTime? metricsSyncedAt;
+  bool get fromInstagram => metricsSource == 'instagram';
   factory SocialPost.fromJson(Map<String, dynamic> j) => SocialPost(
         id: _s(j['id']),
         title: _s(j['title']),
@@ -90,6 +102,10 @@ class SocialPost {
         caption: _s(j['caption']),
         campaign: _s(j['campaign']),
         metrics: _m(j['metrics']).map((k, v) => MapEntry(k, _i(v))),
+        assetId: _sn(j['assetId']),
+        shootId: _sn(j['shootId']),
+        metricsSource: _s(j['metricsSource']),
+        metricsSyncedAt: _dt(j['metricsSyncedAt']),
       );
   DateTime? get day => publishedDate ?? scheduledDate;
 }
@@ -150,9 +166,12 @@ class SocialsOverview {
   const SocialsOverview({
     this.from = '', this.to = '', this.kpis = const SocialsKpis(), this.pipeline = const Pipeline(), this.platforms = const [], this.tracker = const [], this.hasMetrics = false,
     this.calendar = const [], this.teamActivities = const [], this.teamDay = '', this.engagement = const EngagementOverview(), this.recentPosts = const [], this.leads = const OrganicLeads(),
-    this.focus = const [], this.insights = const [],
+    this.focus = const [], this.insights = const [], this.teamScope = 'team',
   });
   final String from, to, teamDay;
+
+  /// 'team' — a manager sees everyone's logged work; 'own' — a member sees only their own.
+  final String teamScope;
   final SocialsKpis kpis;
   final Pipeline pipeline;
   final List<PlatformRow> platforms;
@@ -182,6 +201,7 @@ class SocialsOverview {
         leads: OrganicLeads.fromJson(_m(j['leads'])),
         focus: _l(j['focus']).map(FocusItem.fromJson).toList(),
         insights: ((j['insights'] as List?) ?? const []).map(_s).toList(),
+        teamScope: _s(j['teamScope']).isEmpty ? 'team' : _s(j['teamScope']),
       );
 }
 
@@ -208,13 +228,29 @@ String assetStageLabel(String s) => kAssetStages.firstWhere((e) => e.$1 == s, or
 String assetKindLabel(String s) => kAssetKinds.firstWhere((e) => e.$1 == s, orElse: () => (s, s)).$2;
 
 class Asset {
-  const Asset({required this.id, required this.title, this.brand = 'main', this.kind = 'still', this.media = 'image', this.stage = 'raw', this.url = '', this.thumbUrl = '', this.portfolio = '', this.page = '', this.tags = const [], this.durationSec = 0, this.sizeMb = 0, this.shootId, this.isFinal = false, this.ownerName = ''});
+  const Asset({required this.id, required this.title, this.brand = 'main', this.kind = 'still', this.media = 'image', this.stage = 'raw', this.url = '', this.thumbUrl = '', this.portfolio = '', this.page = '', this.tags = const [], this.durationSec = 0, this.sizeMb = 0, this.shootId, this.isFinal = false, this.ownerName = '', this.owner = '', this.approvedAt, this.createdAt, this.bookingId, this.workDay = '', this.work});
   final String id, title, brand, kind, media, stage, url, thumbUrl, portfolio, page, ownerName;
+
+  /// Who it belongs to: the named owner, else the person who added it.
+  final String owner;
+  final DateTime? approvedAt, createdAt;
+
+  /// A post can be made from it: approved, or marked as a final output.
+  bool get usable => stage == 'approved' || isFinal;
   final List<String> tags;
   final int durationSec;
   final double sizeMb;
   final String? shootId;
   final bool isFinal;
+
+  /// The booking it was picked for (an artist's footage, or one picked in the editor); null = none of its own.
+  final String? bookingId;
+
+  /// The day of a multi-day work it is from ('YYYY-MM-DD').
+  final String workDay;
+
+  /// The work it came from — its own booking, else its shoot's — with the client's review; null = it belongs to no work.
+  final AssetWork? work;
   factory Asset.fromJson(Map<String, dynamic> j) => Asset(
         id: _s(j['id']),
         title: _s(j['title']),
@@ -232,6 +268,12 @@ class Asset {
         shootId: j['shootId'] == null ? null : _s(j['shootId']),
         isFinal: j['isFinal'] == true,
         ownerName: _s(j['ownerName']),
+        owner: _s(j['owner']).isEmpty ? _s(j['ownerName']) : _s(j['owner']),
+        approvedAt: _dt(j['approvedAt']),
+        createdAt: _dt(j['createdAt']),
+        bookingId: _s(j['bookingId']).isEmpty ? null : _s(j['bookingId']),
+        workDay: _s(j['workDay']),
+        work: j['work'] is Map ? AssetWork.fromJson(_m(j['work'])) : null,
       );
 }
 
@@ -243,23 +285,28 @@ class AssetCounts {
 }
 
 class AssetList {
-  const AssetList({this.items = const [], this.counts = const AssetCounts(), this.portfolios = const {}, this.pages = const {}, this.stages = const {}, this.media = const {}, this.kinds = const {}});
+  const AssetList({this.items = const [], this.counts = const AssetCounts(), this.portfolios = const {}, this.pages = const {}, this.stages = const {}, this.media = const {}, this.kinds = const {}, this.tags = const {}, this.owners = const {}});
   final List<Asset> items;
   final AssetCounts counts;
-  final Map<String, int> portfolios, pages, stages, media, kinds;
+
+  /// [tags] — the most used tags, most used first; [owners] — who the assets belong to.
+  final Map<String, int> portfolios, pages, stages, media, kinds, tags, owners;
   factory AssetList.fromJson(Map<String, dynamic> j) {
     Map<String, int> facet(String k) => _m(_m(j['facets'])[k]).map((a, b) => MapEntry(a, _i(b)));
-    return AssetList(items: _l(j['items']).map(Asset.fromJson).toList(), counts: AssetCounts.fromJson(_m(j['counts'])), portfolios: facet('portfolios'), pages: facet('pages'), stages: facet('stages'), media: facet('media'), kinds: facet('kinds'));
+    return AssetList(items: _l(j['items']).map(Asset.fromJson).toList(), counts: AssetCounts.fromJson(_m(j['counts'])), portfolios: facet('portfolios'), pages: facet('pages'), stages: facet('stages'), media: facet('media'), kinds: facet('kinds'), tags: facet('tags'), owners: facet('owners'));
   }
 }
 
+/// How the asset library is cut — all of it server-side. [from]/[to] ('YYYY-MM-DD') = only assets added in those days; [usable] = only
+/// what a post can be made from (approved or final).
 class AssetQuery {
-  const AssetQuery({this.q = '', this.stage, this.kind, this.media, this.portfolio, this.page, this.brand = 'all', this.sort = 'newest', this.shootId});
+  const AssetQuery({this.q = '', this.stage, this.kind, this.media, this.portfolio, this.page, this.brand = 'all', this.sort = 'newest', this.shootId, this.tag, this.owner, this.from, this.to, this.usable = false});
   final String q;
-  final String? stage, kind, media, portfolio, page, shootId;
+  final String? stage, kind, media, portfolio, page, shootId, tag, owner, from, to;
   final String brand, sort;
+  final bool usable;
 
-  AssetQuery copyWith({String? q, Object? stage = _keep, Object? kind = _keep, Object? media = _keep, Object? portfolio = _keep, Object? page = _keep, String? brand, String? sort}) => AssetQuery(
+  AssetQuery copyWith({String? q, Object? stage = _keep, Object? kind = _keep, Object? media = _keep, Object? portfolio = _keep, Object? page = _keep, String? brand, String? sort, Object? tag = _keep, Object? owner = _keep, Object? from = _keep, Object? to = _keep}) => AssetQuery(
         q: q ?? this.q,
         stage: identical(stage, _keep) ? this.stage : stage as String?,
         kind: identical(kind, _keep) ? this.kind : kind as String?,
@@ -269,6 +316,11 @@ class AssetQuery {
         brand: brand ?? this.brand,
         sort: sort ?? this.sort,
         shootId: shootId,
+        tag: identical(tag, _keep) ? this.tag : tag as String?,
+        owner: identical(owner, _keep) ? this.owner : owner as String?,
+        from: identical(from, _keep) ? this.from : from as String?,
+        to: identical(to, _keep) ? this.to : to as String?,
+        usable: usable,
       );
 
   Map<String, dynamic> get query => {
@@ -279,14 +331,19 @@ class AssetQuery {
         'portfolio': ?portfolio,
         'page': ?page,
         'shootId': ?shootId,
+        'tag': ?tag,
+        'owner': ?owner,
+        if (from != null && to != null) ...{'from': from, 'to': to},
+        if (usable) 'usable': 1,
         if (brand != 'all') 'brand': brand,
         if (sort != 'newest') 'sort': sort,
       };
 
   @override
-  bool operator ==(Object other) => other is AssetQuery && other.q == q && other.stage == stage && other.kind == kind && other.media == media && other.portfolio == portfolio && other.page == page && other.brand == brand && other.sort == sort && other.shootId == shootId;
+  bool operator ==(Object other) =>
+      other is AssetQuery && other.q == q && other.stage == stage && other.kind == kind && other.media == media && other.portfolio == portfolio && other.page == page && other.brand == brand && other.sort == sort && other.shootId == shootId && other.tag == tag && other.owner == owner && other.from == from && other.to == to && other.usable == usable;
   @override
-  int get hashCode => Object.hash(q, stage, kind, media, portfolio, page, brand, sort, shootId);
+  int get hashCode => Object.hash(q, stage, kind, media, portfolio, page, brand, sort, shootId, tag, owner, from, to, usable);
 }
 
 const Object _keep = Object();
@@ -324,11 +381,14 @@ class TargetsData {
 // ── performance and reports ──────────────────────────────────────────────────
 
 class PlatformPerf {
-  const PlatformPerf({required this.platform, required this.label, this.posts = 0, this.reach = 0, this.impressions = 0, this.engagements = 0, this.er});
+  const PlatformPerf({required this.platform, required this.label, this.posts = 0, this.reach = 0, this.impressions = 0, this.engagements = 0, this.er, this.change = const {}});
   final String platform, label;
   final int posts, reach, impressions, engagements;
   final double? er;
-  factory PlatformPerf.fromJson(Map<String, dynamic> j) => PlatformPerf(platform: _s(j['platform']), label: _s(j['label']), posts: _i(j['posts']), reach: _i(j['reach']), impressions: _i(j['impressions']), engagements: _i(j['engagements']), er: _dn(j['er']));
+
+  /// The change in % against the period before — 'posts', 'reach', 'engagements'; null when there was nothing before.
+  final Map<String, int?> change;
+  factory PlatformPerf.fromJson(Map<String, dynamic> j) => PlatformPerf(platform: _s(j['platform']), label: _s(j['label']), posts: _i(j['posts']), reach: _i(j['reach']), impressions: _i(j['impressions']), engagements: _i(j['engagements']), er: _dn(j['er']), change: _changes(j['change']));
 }
 
 class TopPost {
@@ -384,12 +444,15 @@ class MonthPoint {
 }
 
 class SocialsReports {
-  const SocialsReports({this.from = '', this.to = '', this.overallGrowth, this.reach = const SummaryFigure(), this.impressions = const SummaryFigure(), this.engagements = const SummaryFigure(), this.followers = const SummaryFigure(), this.growthTrend = const [], this.insights = const [], this.platforms = const [], this.top = const [], this.kpis = const SocialsKpis()});
+  const SocialsReports({this.from = '', this.to = '', this.overallGrowth, this.reach = const SummaryFigure(), this.impressions = const SummaryFigure(), this.engagements = const SummaryFigure(), this.followers = const SummaryFigure(), this.growthTrend = const [], this.insights = const [], this.nextActions = const [], this.platforms = const [], this.top = const [], this.kpis = const SocialsKpis()});
   final String from, to;
   final int? overallGrowth;
   final SummaryFigure reach, impressions, engagements, followers;
   final List<MonthPoint> growthTrend;
   final List<String> insights;
+
+  /// What to do next, from the period's figures (plain rules on the server), most pressing first.
+  final List<String> nextActions;
   final List<PlatformPerf> platforms;
   final List<TopPost> top;
   final SocialsKpis kpis;
@@ -405,6 +468,7 @@ class SocialsReports {
       followers: SummaryFigure.fromJson(_m(s['followers'])),
       growthTrend: _l(j['growthTrend']).map(MonthPoint.fromJson).toList(),
       insights: ((j['insights'] as List?) ?? const []).map(_s).toList(),
+      nextActions: ((j['nextActions'] as List?) ?? const []).map(_s).toList(),
       platforms: _l(j['platforms']).map(PlatformPerf.fromJson).toList(),
       top: _l(j['top']).map(TopPost.fromJson).toList(),
       kpis: SocialsKpis.fromJson(_m(j['kpis'])),

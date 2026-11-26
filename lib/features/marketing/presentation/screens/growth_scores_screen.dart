@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/extensions/space_extension.dart';
-import '../../../../core/theme/crm_theme.dart';
-import '../../../../core/utils/responsive_builder.dart';
 import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
+import '../kit/mkt_kit.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -25,85 +24,99 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
   int _tab = 0; // 0 overall · 1 reels · 2 websites · 3 collaborations
   String? _formCompetitorId;
 
-  static const _tabs = ['Overall', 'Top Reels', 'Top Websites', 'Top Collabs'];
+  static const _tabs = [
+    MktTabSpec('0', 'Overall', Icons.leaderboard_outlined),
+    MktTabSpec('1', 'Top Reels', Icons.play_circle_outline_rounded),
+    MktTabSpec('2', 'Top Websites', Icons.language_outlined),
+    MktTabSpec('3', 'Top Collabs', Icons.handshake_outlined),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(rankingsProvider(null));
 
-    return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(rankingsProvider(null))),
-      data: (board) {
-        return ListView(
-          padding:
-              EdgeInsets.fromLTRB(isMobile ? 16 : 24, 16, isMobile ? 16 : 24, 28),
-          children: [
-            Row(
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: async.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(rankingsProvider(null))),
+          data: (board) {
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Weekly Growth Score',
-                          style: TextStyle(
-                              fontSize: isMobile ? 21 : 27,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
-                      4.h,
-                      Text(
-                          'Week of ${_weekLabel(board.weekOf)} · score 1–25',
-                          style: TextStyle(
-                              fontSize: 13, color: crm.textSecondary)),
-                    ],
-                  ),
+                MktHeader(
+                  icon: Icons.speed_outlined,
+                  title: 'Weekly Score',
+                  subtitle: 'Week of ${_weekLabel(board.weekOf)} · score 1–25',
+                  actions: [
+                    MktPill(label: 'Weights', icon: Icons.tune, trailing: false, onTap: _editWeights),
+                  ],
                 ),
-                OutlinedButton.icon(
-                  onPressed: _editWeights,
-                  icon: const Icon(Icons.tune, size: 18),
-                  label: const Text('Weights'),
+                const SizedBox(height: 14),
+                _scoreForm(),
+                const SizedBox(height: 14),
+                // Tab selector
+                MktTabPills(
+                  keyPrefix: 'gs_tab',
+                  tabs: _tabs,
+                  selected: '$_tab',
+                  onSelect: (id) => setState(() => _tab = int.parse(id)),
                 ),
+                const SizedBox(height: 12),
+                _content(board),
               ],
-            ),
-            16.h,
-            _scoreForm(crm),
-            16.h,
-            // Tab selector
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var i = 0; i < _tabs.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        selected: _tab == i,
-                        label: Text(_tabs[i]),
-                        onSelected: (_) => setState(() => _tab = i),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            14.h,
-            ..._content(crm, board),
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
-  List<Widget> _content(CrmTheme crm, RankingBoard board) {
+  Widget _content(RankingBoard board) {
     if (_tab == 0) {
-      if (board.rankings.isEmpty) return [_empty(crm)];
-      return board.rankings
-          .map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _rankRow(crm, r),
-              ))
-          .toList();
+      if (board.rankings.isEmpty) return _empty();
+      return MktCard(
+        title: 'Overall ranking',
+        icon: Icons.leaderboard_outlined,
+        subtitle: 'Tap a competitor to see the signals behind its score',
+        child: MktTable(
+          rowHeight: 54,
+          columns: const [
+            MktCol('#', width: 44),
+            MktCol('Competitor', flex: 3),
+            MktCol('Move', width: 56, align: Alignment.center),
+            MktCol('Score', width: 84, align: Alignment.centerRight),
+          ],
+          onRowTap: (i) => _showSignals(board.rankings[i]),
+          rows: [
+            for (final r in board.rankings)
+              [
+                _rankBadge(r.rank, r.rank <= 3),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(13.5, weight: FontWeight.w800)),
+                    2.h,
+                    Text(
+                      [
+                        if (r.city.isNotEmpty) r.city,
+                        if (r.category.isNotEmpty) r.category,
+                        '${r.signals.length} signal${r.signals.length == 1 ? '' : 's'}',
+                      ].join('  ·  '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mktText(11.5, color: Mkt.inkSoft),
+                    ),
+                  ],
+                ),
+                MovementChip(movement: r.movement),
+                ScoreBadge(score: r.score),
+              ],
+          ],
+        ),
+      );
     }
     final list = _tab == 1
         ? board.reels
@@ -111,143 +124,70 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
             ? board.websites
             : board.collaborations;
     final unit = _tab == 1 ? '% eng.' : (_tab == 2 ? 'SEO' : 'collabs');
-    if (list.isEmpty) return [_empty(crm)];
-    return list
-        .map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _leaderboardRow(crm, e, unit),
-            ))
-        .toList();
-  }
-
-  Widget _empty(CrmTheme crm) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48),
-        child: Center(
-          child: Column(children: [
-            Icon(Icons.leaderboard_outlined,
-                size: 42, color: crm.textSecondary),
-            10.h,
-            Text('No weekly data yet for this week',
-                style: TextStyle(color: crm.textSecondary)),
-            6.h,
-            Text('Add weekly data on the Competitors screen to populate.',
-                style: TextStyle(color: crm.textSecondary, fontSize: 12)),
-          ]),
-        ),
-      );
-
-  Widget _rankRow(CrmTheme crm, CompetitorRanking r) {
-    final medal = r.rank <= 3;
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => _showSignals(r),
-      child: Container(
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: crm.border),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            _rankBadge(crm, r.rank, medal),
-            12.w,
-            Expanded(
-              child: Column(
+    if (list.isEmpty) return _empty();
+    return MktCard(
+      title: _tab == 1 ? 'Top reels' : (_tab == 2 ? 'Top websites' : 'Top collaborations'),
+      icon: _tabs[_tab].icon,
+      child: MktTable(
+        rowHeight: 50,
+        columns: const [
+          MktCol('#', width: 44),
+          MktCol('Name', flex: 3),
+          MktCol('Value', flex: 2, align: Alignment.centerRight),
+          MktCol('Score', width: 84, align: Alignment.centerRight),
+        ],
+        rows: [
+          for (final e in list)
+            [
+              _rankBadge(e.rank, e.rank <= 3),
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14.5,
-                          color: crm.textPrimary)),
-                  2.h,
-                  Text(
-                    [
-                      if (r.city.isNotEmpty) r.city,
-                      if (r.category.isNotEmpty) r.category,
-                      '${r.signals.length} signal${r.signals.length == 1 ? '' : 's'}',
-                    ].join('  ·  '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                  ),
+                  Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(13, weight: FontWeight.w700)),
+                  if (e.city.isNotEmpty) Text(e.city, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(11.5, color: Mkt.inkSoft)),
                 ],
               ),
-            ),
-            8.w,
-            MovementChip(movement: r.movement),
-            12.w,
-            ScoreBadge(score: r.score),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _leaderboardRow(CrmTheme crm, LeaderboardEntry e, String unit) {
-    return Container(
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      child: Row(
-        children: [
-          _rankBadge(crm, e.rank, e.rank <= 3),
-          12.w,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(e.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, color: crm.textPrimary)),
-                if (e.city.isNotEmpty) ...[
-                  2.h,
-                  Text(e.city,
-                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                ],
-              ],
-            ),
-          ),
-          Text('${e.metric % 1 == 0 ? e.metric.toStringAsFixed(0) : e.metric.toStringAsFixed(1)} $unit',
-              style: TextStyle(
-                  fontWeight: FontWeight.w800, color: crm.textPrimary)),
-          12.w,
-          ScoreBadge(score: e.score),
+              Text(
+                '${e.metric % 1 == 0 ? e.metric.toStringAsFixed(0) : e.metric.toStringAsFixed(1)} $unit',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: mktText(12.5, weight: FontWeight.w800),
+              ),
+              ScoreBadge(score: e.score),
+            ],
         ],
       ),
     );
   }
 
-  Widget _rankBadge(CrmTheme crm, int rank, bool medal) => Container(
-        width: 34,
-        height: 34,
+  Widget _empty() => const MktCard(
+        title: 'Nothing to rank yet',
+        icon: Icons.leaderboard_outlined,
+        child: MktEmpty(
+          'No weekly data yet for this week\nAdd weekly data on the Competitors screen to populate.',
+          icon: Icons.leaderboard_outlined,
+          height: 130,
+        ),
+      );
+
+  Widget _rankBadge(int rank, bool medal) => Container(
+        width: 30,
+        height: 30,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: medal ? crm.primary.withValues(alpha: 0.12) : crm.input,
+          color: medal ? Mkt.primarySoft : Mkt.bg,
           shape: BoxShape.circle,
-          border: Border.all(
-              color: medal ? crm.primary : crm.border, width: medal ? 1.4 : 1),
+          border: Border.all(color: medal ? Mkt.primary : Mkt.border, width: medal ? 1.4 : 1),
         ),
-        child: Text('$rank',
-            style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: medal ? crm.primary : crm.textSecondary)),
+        child: Text('$rank', style: mktText(12.5, weight: FontWeight.w800, color: medal ? Mkt.primary : Mkt.inkSoft)),
       );
 
   // ── Signal evidence breakdown (FR-2.2) ──────────────────────────────────
   void _showSignals(CompetitorRanking r) {
-    final crm = context.crmColors;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: crm.surface,
+      backgroundColor: Mkt.card,
       // A competitor with many signals overflows a fixed-height sheet, so allow
       // it to grow and scroll instead of clipping.
       isScrollControlled: true,
@@ -265,10 +205,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
             Row(children: [
               Expanded(
                 child: Text('${r.name} · score ${r.score}/25',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: crm.textPrimary)),
+                    style: mktText(17, weight: FontWeight.w800)),
               ),
               ScoreBadge(score: r.score, large: true),
             ]),
@@ -280,53 +217,34 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                   children: [
             if (r.signals.isEmpty)
               Text('No signals triggered — base score 1.',
-                  style: TextStyle(color: crm.textSecondary))
+                  style: mktText(13, color: Mkt.inkSoft))
             else
               ...r.signals.map((s) => Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: crm.input,
+                      color: Mkt.bg,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: crm.border),
+                      border: Border.all(color: Mkt.border),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                              color: crm.primary,
-                              borderRadius: BorderRadius.circular(20)),
-                          child: Text('+${s.points}',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12)),
-                        ),
+                        MktChip('+${s.points}', solid: true),
                         10.w,
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(s.label,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: crm.textPrimary)),
+                              Text(s.label, style: mktText(13.5, weight: FontWeight.w700)),
                               2.h,
                               Text(
                                   s.evidence.isEmpty
                                       ? 'No evidence recorded'
                                       : s.evidence,
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontStyle: s.evidence.isEmpty
-                                          ? FontStyle.italic
-                                          : FontStyle.normal,
-                                      color: s.evidence.isEmpty
-                                          ? crm.destructive
-                                          : crm.textSecondary)),
+                                  style: mktText(12.5,
+                                      color: s.evidence.isEmpty ? Mkt.bad : Mkt.inkSoft)
+                                      .copyWith(fontStyle: s.evidence.isEmpty ? FontStyle.italic : FontStyle.normal)),
                               // The manually-scored reel / post, opened in the
                               // browser or the Instagram app.
                               if (s.link.trim().isNotEmpty) ...[
@@ -352,19 +270,15 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.play_circle_outline,
-                                          size: 15, color: crm.primary),
+                                      const Icon(Icons.play_circle_outline,
+                                          size: 15, color: Mkt.primary),
                                       6.w,
                                       Flexible(
                                         child: Text('Open reel / post',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: crm.primary,
-                                                decoration: TextDecoration
-                                                    .underline)),
+                                            style: mktText(12.5, weight: FontWeight.w700, color: Mkt.primary)
+                                                .copyWith(decoration: TextDecoration.underline)),
                                       ),
                                     ],
                                   ),
@@ -390,97 +304,74 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
   // ── Weights editor (FR-2.3) ─────────────────────────────────────────────
   /// Inline "score a competitor this week" form: pick an existing competitor
   /// and open the shared scoring editor (metrics, signals, reel/post links).
-  Widget _scoreForm(CrmTheme crm) {
+  Widget _scoreForm() {
     final async = ref.watch(competitorsProvider);
     final competitors = async.value ?? const <Competitor>[];
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            crm.primary.withValues(alpha: 0.08),
-            crm.primary.withValues(alpha: 0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.primary.withValues(alpha: 0.20)),
-      ),
+    return MktCard(
+      title: 'Score a competitor this week',
+      icon: Icons.add_chart,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.add_chart, size: 18, color: crm.primary),
-              8.w,
-              Text('Score a competitor this week',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: crm.textPrimary)),
-            ],
-          ),
-          4.h,
-          Text('Pick a competitor, enter this week\'s metrics and signals, and '
-              'paste the reel / post you scored.',
-              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          Text("Pick a competitor, enter this week's metrics and signals, and paste the reel / post you scored.",
+              style: mktText(11.5, color: Mkt.inkSoft)),
           12.h,
           if (async.isLoading)
-            const LinearProgressIndicator()
+            const LinearProgressIndicator(color: Mkt.primary)
           else if (competitors.isEmpty)
             Text('No competitors yet — add one on the Competitors screen first.',
-                style: TextStyle(fontSize: 12.5, color: crm.textSecondary))
+                style: mktText(12.5, color: Mkt.inkSoft))
           else
             LayoutBuilder(builder: (context, c) {
-              final stack = c.maxWidth < 520;
-              final dropdown = DropdownButtonFormField<String>(
-                initialValue: _formCompetitorId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Competitor',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.storefront_outlined, size: 18),
-                ),
-                items: [
-                  for (final comp in competitors)
-                    DropdownMenuItem(
-                      value: comp.id,
-                      child: Text(
-                        comp.city.trim().isEmpty
-                            ? comp.name
-                            : '${comp.name} · ${comp.city}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  final stack = c.maxWidth < 520;
+                  final dropdown = DropdownButtonFormField<String>(
+                    initialValue: _formCompetitorId,
+                    isExpanded: true,
+                    style: mktText(13),
+                    decoration: InputDecoration(
+                      labelText: 'Competitor',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Mkt.bg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.primary)),
+                      prefixIcon: const Icon(Icons.storefront_outlined, size: 18),
                     ),
-                ],
-                onChanged: (v) => setState(() => _formCompetitorId = v),
-              );
-              final button = SizedBox(
-                height: 48,
-                width: stack ? double.infinity : null,
-                child: FilledButton.icon(
-                  onPressed: _formCompetitorId == null
-                      ? null
-                      : () async {
-                          final comp = competitors.firstWhere(
-                              (x) => x.id == _formCompetitorId,
-                              orElse: () => competitors.first);
-                          await showSnapshotEditor(context, ref, comp);
-                        },
-                  icon: const Icon(Icons.edit_note, size: 18),
-                  label: const Text('Enter score'),
-                ),
-              );
-              return stack
-                  ? Column(children: [dropdown, 10.h, button])
-                  : Row(children: [
-                      Expanded(child: dropdown),
-                      12.w,
-                      button,
-                    ]);
+                    items: [
+                      for (final comp in competitors)
+                        DropdownMenuItem(
+                          value: comp.id,
+                          child: Text(
+                            comp.city.trim().isEmpty
+                                ? comp.name
+                                : '${comp.name} · ${comp.city}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _formCompetitorId = v),
+                  );
+                  final button = MktPrimaryButton(
+                    label: 'Enter score',
+                    icon: Icons.edit_note,
+                    onPressed: _formCompetitorId == null
+                        ? null
+                        : () async {
+                            final comp = competitors.firstWhere(
+                                (x) => x.id == _formCompetitorId,
+                                orElse: () => competitors.first);
+                            await showSnapshotEditor(context, ref, comp);
+                          },
+                  );
+                  return stack
+                      ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [dropdown, 10.h, button])
+                      : Row(children: [
+                          Expanded(child: dropdown),
+                          12.w,
+                          button,
+                        ]);
             }),
         ],
       ),
@@ -488,7 +379,6 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
   }
 
   Future<void> _editWeights() async {
-    final crm = context.crmColors;
     final ScoringConfig cfg;
     try {
       cfg = await ref.read(scoringConfigProvider.future);
@@ -543,7 +433,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Points per signal. Score is clamped 1–25.',
-                      style: TextStyle(color: crm.textSecondary, fontSize: 12)),
+                      style: mktText(12, color: Mkt.inkSoft)),
                   12.h,
                   for (final k in keys)
                     Padding(
@@ -573,12 +463,12 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: total() == 25
-                              ? crm.success
-                              : crm.warning)),
+                              ? Mkt.good
+                              : Mkt.warn)),
                   if (total() != 25)
                     Text('SRS §4.2 expects the weights to sum to 25.',
                         style:
-                            TextStyle(fontSize: 11, color: crm.textSecondary)),
+                            mktText(11, color: Mkt.inkSoft)),
                 ],
               ),
             ),

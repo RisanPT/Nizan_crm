@@ -3,6 +3,8 @@ class LeadActivity {
   final String leadId;
   final String createdByName;
   final String type; // 'followup' | 'call' | 'activity'
+  /// How a follow-up is done: 'call' | 'whatsapp' | 'visit' | 'meeting' | 'other'; '' = not said (older entries).
+  final String channel;
   final DateTime scheduledDate;
   final String remark;
   final String status; // 'Pending' | 'Completed' | 'Cancelled'
@@ -15,6 +17,7 @@ class LeadActivity {
     required this.leadId,
     required this.createdByName,
     required this.type,
+    this.channel = '',
     required this.scheduledDate,
     required this.remark,
     required this.status,
@@ -34,6 +37,7 @@ class LeadActivity {
           ? (createdByMap['name'] as String? ?? 'Unknown')
           : 'Unknown',
       type: json['type'] as String? ?? 'activity',
+      channel: json['channel'] as String? ?? '',
       scheduledDate: json['scheduledDate'] != null
           ? DateTime.parse(json['scheduledDate'] as String).toLocal()
           : DateTime.now(),
@@ -52,6 +56,7 @@ class LeadActivity {
       if (id.isNotEmpty) 'id': id,
       'leadId': leadId,
       'type': type,
+      if (channel.isNotEmpty) 'channel': channel,
       'scheduledDate': scheduledDate.toIso8601String(),
       'remark': remark,
       'status': status,
@@ -61,3 +66,9 @@ class LeadActivity {
     };
   }
 }
+
+/// The ways a follow-up can be done, as the CRM saves them (backend models/LeadActivity.js FOLLOWUP_CHANNELS) with their labels.
+const kFollowUpChannels = [('call', 'Call'), ('whatsapp', 'WhatsApp'), ('visit', 'Visit'), ('meeting', 'Meeting'), ('other', 'Other')];
+
+/// The label of a follow-up channel ('' when not said).
+String followUpChannelName(String key) => kFollowUpChannels.firstWhere((c) => c.$1 == key, orElse: () => ('', '')).$2;

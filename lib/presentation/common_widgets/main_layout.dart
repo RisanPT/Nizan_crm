@@ -31,6 +31,23 @@ int leadershipTabIndex(String location) {
   return 3;
 }
 
+/// Which bottom tab the Marketing login shows as selected on [location]: Overview, Competitors, Score, and for every other marketing screen
+/// (portfolio, socials, campaigns, lead report…) More, the tab that opens the full menu, so no tab claims a screen it does not own.
+int marketingTabIndex(String location) {
+  if (location == '/marketing/dashboard') return 0;
+  if (location.startsWith('/marketing/competitors')) return 1;
+  if (location.startsWith('/marketing/scores')) return 2;
+  return 3;
+}
+
+/// The Marketing login's bottom bar on a phone: Overview, Competitors, Score, and More (the full menu, as a drawer).
+List<NavigationDestination> marketingDestinations() => const [
+      NavigationDestination(key: Key('mkt_bar_overview'), icon: Icon(Icons.donut_small_outlined), selectedIcon: Icon(Icons.donut_small), label: 'Overview'),
+      NavigationDestination(key: Key('mkt_bar_competitors'), icon: Icon(Icons.dataset_outlined), selectedIcon: Icon(Icons.dataset), label: 'Competitors'),
+      NavigationDestination(key: Key('mkt_bar_score'), icon: Icon(Icons.leaderboard_outlined), selectedIcon: Icon(Icons.leaderboard), label: 'Score'),
+      NavigationDestination(key: Key('mkt_bar_more'), icon: Icon(Icons.menu), selectedIcon: Icon(Icons.menu_open), label: 'More'),
+    ];
+
 /// The CEO / Executive Director's bottom bar: Home, Decisions (with the number waiting), Money, and More (the full menu).
 List<NavigationDestination> leadershipDestinations(int waiting) => [
       const NavigationDestination(
@@ -147,10 +164,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       // Invoice / Budget / Profile live in the Menu sheet.
       return 3;
     } else if (role == AppRole.marketingAdmin) {
-      if (location == '/marketing/dashboard') return 0;
-      if (location.startsWith('/marketing/competitors')) return 1;
-      if (location.startsWith('/marketing/scores')) return 2;
-      return 0;
+      return marketingTabIndex(location);
     } else if (role == AppRole.stylist) {
       if (location == '/consultations/dashboard') return 0;
       if (location.startsWith('/stylist/clients')) return 1;
@@ -234,6 +248,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 0: context.go('/marketing/dashboard'); break;
         case 1: context.go('/marketing/competitors'); break;
         case 2: context.go('/marketing/scores'); break;
+        case 3: _scaffoldKey.currentState?.openDrawer(); break; // More: the full Marketing menu
       }
     } else if (role == AppRole.stylist) {
       switch (index) {
@@ -456,23 +471,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                               ),
                             ]
                           : role == AppRole.marketingAdmin
-                          ? const [
-                              NavigationDestination(
-                                icon: Icon(Icons.donut_small_outlined),
-                                selectedIcon: Icon(Icons.donut_small),
-                                label: 'Overview',
-                              ),
-                              NavigationDestination(
-                                icon: Icon(Icons.dataset_outlined),
-                                selectedIcon: Icon(Icons.dataset),
-                                label: 'Competitors',
-                              ),
-                              NavigationDestination(
-                                icon: Icon(Icons.leaderboard_outlined),
-                                selectedIcon: Icon(Icons.leaderboard),
-                                label: 'Score',
-                              ),
-                            ]
+                          ? marketingDestinations()
                           : role == AppRole.stylist
                           ? const [
                               NavigationDestination(

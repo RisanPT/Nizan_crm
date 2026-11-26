@@ -2,9 +2,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
@@ -42,125 +42,129 @@ class _MarketingCalendarScreenState
 
   @override
   Widget build(BuildContext context) {
-    final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final year = ref.watch(calendarYearProvider);
     final basis = ref.watch(calendarBasisProvider);
     final async = ref.watch(bookingCalendarProvider);
 
-    return Scaffold(
-      backgroundColor: crm.background,
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(bookingCalendarProvider),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding:
-              EdgeInsets.fromLTRB(isMobile ? 14 : 24, 18, isMobile ? 14 : 24, 40),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Sales Calendar',
-                          style: TextStyle(
-                              fontSize: isMobile ? 22 : 27,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
-                      Text('Year-over-year booking comparison',
-                          style:
-                              TextStyle(fontSize: 12.5, color: crm.textSecondary)),
-                    ],
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(bookingCalendarProvider),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+            children: [
+              MktHeader(
+                icon: Icons.calendar_month_outlined,
+                title: 'Sales Calendar',
+                subtitle: 'Year-over-year booking comparison',
+                actions: [
+                  // metric: bookings ⇄ revenue
+                  MktDropdownPill<bool>(
+                    value: _revenue,
+                    icon: Icons.stacked_bar_chart_rounded,
+                    options: const [(false, 'Bookings'), (true, 'Revenue')],
+                    onChanged: (v) => setState(() => _revenue = v),
                   ),
+                  // date basis: event ⇄ sales
+                  MktDropdownPill<String>(
+                    value: basis,
+                    icon: Icons.event_outlined,
+                    options: const [('event', 'Event date'), ('sales', 'Sales date')],
+                    onChanged: (v) => ref.read(calendarBasisProvider.notifier).state = v,
+                  ),
+                  _yearButton(year),
+                ],
+              ),
+              14.hg,
+              async.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 80),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-                _yearButton(crm, year),
-              ],
-            ),
-            14.hg,
-            async.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 80),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 80),
-                child: AppErrorView(error: e, onRetry: () => ref.invalidate(bookingCalendarProvider)),
-              ),
-              data: (d) {
-                // Clamp displayed month if it somehow drifted out of range.
-                final m = _month.clamp(0, 11);
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 80),
+                  child: AppErrorView(error: e, onRetry: () => ref.invalidate(bookingCalendarProvider)),
+                ),
+                data: (d) {
+                  // Clamp displayed month if it somehow drifted out of range.
+                  final m = _month.clamp(0, 11);
 
-                // Slot-availability overlay — only in EVENT-date mode, since
-                // slots are event-day capacity (meaningless against sales dates).
-                final slotsByDay = <String, DaySlot>{};
-                if (basis == 'event') {
-                  final ma = ref
-                      .watch(monthAvailabilityProvider((year: d.year, month: m + 1)))
-                      .value;
-                  if (ma != null) {
-                    for (final day in ma.days) {
-                      slotsByDay[_ymd(day.date)] = day;
-                    }
-                  }
-                }
-
-                // Prodate finder — EVENT-date mode only (a prodate is a peak
-                // EVENT day). Days this year with >= _minProdate bookings.
-                final prodateActive = basis == 'event';
-                final prodateDays = <String>{};
-                final prodates = <_Prodate>[];
-                if (prodateActive) {
-                  d.current.forEach((key, v) {
-                    if (v.bookings >= _minProdate) {
-                      prodateDays.add(key);
-                      final dt = DateTime.tryParse(key);
-                      if (dt != null) {
-                        prodates.add(_Prodate(
-                            date: dt, bookings: v.bookings, revenue: v.revenue));
+                  // Slot-availability overlay — only in EVENT-date mode, since
+                  // slots are event-day capacity (meaningless against sales dates).
+                  final slotsByDay = <String, DaySlot>{};
+                  if (basis == 'event') {
+                    final ma = ref
+                        .watch(monthAvailabilityProvider((year: d.year, month: m + 1)))
+                        .value;
+                    if (ma != null) {
+                      for (final day in ma.days) {
+                        slotsByDay[_ymd(day.date)] = day;
                       }
                     }
-                  });
-                  prodates.sort((a, b) => a.date.compareTo(b.date));
-                }
+                  }
 
-                final calSubtitle = basis == 'sales'
-                    ? 'By SALES date (when the booking was made) — hover or tap a day to compare with ${d.prevYear}'
-                    : 'By EVENT date — hover or tap a day for details, slots left, and the same date in ${d.prevYear}';
+                  // Prodate finder — EVENT-date mode only (a prodate is a peak
+                  // EVENT day). Days this year with >= _minProdate bookings.
+                  final prodateActive = basis == 'event';
+                  final prodateDays = <String>{};
+                  final prodates = <_Prodate>[];
+                  if (prodateActive) {
+                    d.current.forEach((key, v) {
+                      if (v.bookings >= _minProdate) {
+                        prodateDays.add(key);
+                        final dt = DateTime.tryParse(key);
+                        if (dt != null) {
+                          prodates.add(_Prodate(
+                              date: dt, bookings: v.bookings, revenue: v.revenue));
+                        }
+                      }
+                    });
+                    prodates.sort((a, b) => a.date.compareTo(b.date));
+                  }
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _controlsRow(crm, basis, prodateActive ? prodates : null),
-                    12.hg,
-                    _summaryCard(crm, isMobile, d),
-                    14.hg,
-                    _card(
-                      crm,
-                      'Calendar',
-                      _calendarBody(context, crm, isMobile, d, m, slotsByDay,
-                          prodateDays, prodateActive && _prodatesOnly),
-                      subtitle: calSubtitle,
-                    ),
-                    14.hg,
-                    _card(crm, 'Monthly comparison — ${d.year} vs ${d.prevYear}',
-                        _MonthStrip(crm: crm, data: d, revenue: _revenue),
-                        subtitle: _revenue
-                            ? 'Revenue by month, both years'
-                            : 'Bookings by month, both years'),
-                  ],
-                );
-              },
-            ),
-          ],
+                  final calSubtitle = basis == 'sales'
+                      ? 'By SALES date (when the booking was made) — hover or tap a day to compare with ${d.prevYear}'
+                      : 'By EVENT date — hover or tap a day for details, slots left, and the same date in ${d.prevYear}';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (prodateActive) ...[
+                        _prodateControls(prodates),
+                        12.hg,
+                      ],
+                      _summaryCard(d),
+                      14.hg,
+                      _card(
+                        'Calendar',
+                        _calendarBody(context, isMobile, d, m, slotsByDay,
+                            prodateDays, prodateActive && _prodatesOnly),
+                        icon: Icons.calendar_month_outlined,
+                        subtitle: calSubtitle,
+                      ),
+                      14.hg,
+                      _card('Monthly comparison — ${d.year} vs ${d.prevYear}',
+                          _MonthStrip(data: d, revenue: _revenue),
+                          icon: Icons.bar_chart_rounded,
+                          subtitle: _revenue
+                              ? 'Revenue by month, both years'
+                              : 'Bookings by month, both years'),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ── Summary: this year vs last year, like-for-like ──
-  Widget _summaryCard(CrmTheme crm, bool isMobile, CalendarComparison d) {
+  Widget _summaryCard(CalendarComparison d) {
     final isCurrentYear = d.year == DateTime.now().year;
 
     // For the running year, compare against last year up to the SAME point in
@@ -192,85 +196,44 @@ class _MarketingCalendarScreenState
         ? 'vs ${d.prevYear} to date (same point in the year)'
         : 'vs full ${d.prevYear}';
 
-    final tiles = [
-      _statTile(crm, '${d.year} bookings', curB.toString(),
-          '$prevCmpB in ${d.prevYear}', bDelta),
-      _statTile(crm, '${d.year} revenue', _money(curR),
-          '${_money(prevCmpR)} in ${d.prevYear}', rDelta),
-    ];
+    String deltaNote(double? pct, String sub) {
+      if (pct == null) return sub;
+      final arrow = pct == 0 ? '' : (pct > 0 ? '▲ ' : '▼ ');
+      return '$arrow${pct.abs().toStringAsFixed(0)}% · $sub';
+    }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          isMobile
-              ? Column(
-                  children: [
-                    tiles[0],
-                    12.hg,
-                    Divider(color: crm.border, height: 1),
-                    12.hg,
-                    tiles[1],
-                  ],
-                )
-              : IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: tiles[0]),
-                      VerticalDivider(color: crm.border, width: 32),
-                      Expanded(child: tiles[1]),
-                    ],
-                  ),
-                ),
-          10.hg,
-          Text(periodNote,
-              style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-        ],
-      ),
-    );
-  }
-
-  Widget _statTile(
-      CrmTheme crm, String label, String value, String sub, double? deltaPct) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: crm.textSecondary)),
-        6.hg,
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        MktKpiRow(
+          minWidth: 200,
           children: [
-            Text(value,
-                style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                    color: crm.textPrimary)),
-            8.wg,
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: _deltaChip(deltaPct),
+            MktKpiCard(
+              icon: Icons.event_available_outlined,
+              value: curB.toString(),
+              label: '${d.year} bookings',
+              note: deltaNote(bDelta, '$prevCmpB in ${d.prevYear}'),
+              good: bDelta == null || bDelta == 0 ? null : bDelta > 0,
+              tint: Mkt.primary,
+            ),
+            MktKpiCard(
+              icon: Icons.payments_outlined,
+              value: _money(curR),
+              label: '${d.year} revenue',
+              note: deltaNote(rDelta, '${_money(prevCmpR)} in ${d.prevYear}'),
+              good: rDelta == null || rDelta == 0 ? null : rDelta > 0,
+              tint: Mkt.good,
             ),
           ],
         ),
-        4.hg,
-        Text(sub, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+        6.hg,
+        Text(periodNote, style: mktText(11, color: Mkt.inkSoft)),
       ],
     );
   }
 
   // ── Calendar body: month nav + weekday header + day grid + legend ──
-  Widget _calendarBody(BuildContext context, CrmTheme crm, bool isMobile,
+  Widget _calendarBody(BuildContext context, bool isMobile,
       CalendarComparison d, int m, Map<String, DaySlot> slotsByDay,
       Set<String> prodateDays, bool dimNonProdate) {
     final year = d.year;
@@ -288,7 +251,7 @@ class _MarketingCalendarScreenState
     final cells = <Widget>[
       for (var i = 0; i < leadingBlanks; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
-        _dayCell(context, crm, DateTime(year, m + 1, day), d, monthMax,
+        _dayCell(context, DateTime(year, m + 1, day), d, monthMax,
             slotsByDay[_ymd(DateTime(year, m + 1, day))],
             prodateDays.contains(_ymd(DateTime(year, m + 1, day))), dimNonProdate),
     ];
@@ -301,16 +264,16 @@ class _MarketingCalendarScreenState
         // Month navigator
         Row(
           children: [
-            _navBtn(crm, Icons.chevron_left, () => _stepMonth(-1)),
+            _navBtn(Icons.chevron_left, () => _stepMonth(-1)),
             8.wg,
-            _navBtn(crm, Icons.chevron_right, () => _stepMonth(1)),
+            _navBtn(Icons.chevron_right, () => _stepMonth(1)),
             10.wg,
             Expanded(
               child: Text('${_monthName(m)} $year',
                   style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      color: crm.textPrimary)),
+                      color: Mkt.ink)),
             ),
             if (!_isViewingCurrentMonth())
               TextButton.icon(
@@ -318,7 +281,7 @@ class _MarketingCalendarScreenState
                 icon: const Icon(Icons.today_outlined, size: 16),
                 label: const Text('Today'),
                 style: TextButton.styleFrom(
-                  foregroundColor: crm.primary,
+                  foregroundColor: Mkt.primary,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -335,7 +298,7 @@ class _MarketingCalendarScreenState
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: crm.textSecondary)),
+                          color: Mkt.inkSoft)),
                 ),
               ),
           ],
@@ -355,12 +318,12 @@ class _MarketingCalendarScreenState
           children: cells,
         ),
         14.hg,
-        _legend(crm, slotsByDay.isNotEmpty, prodateDays.isNotEmpty || dimNonProdate),
+        _legend(slotsByDay.isNotEmpty, prodateDays.isNotEmpty || dimNonProdate),
       ],
     );
   }
 
-  Widget _dayCell(BuildContext context, CrmTheme crm, DateTime date,
+  Widget _dayCell(BuildContext context, DateTime date,
       CalendarComparison d, double monthMax, DaySlot? slot, bool isProdate,
       bool dimNonProdate) {
     final cur = d.curFor(date);
@@ -375,9 +338,9 @@ class _MarketingCalendarScreenState
     final level = _revenue
         ? _relLevel(cur.revenue, monthMax)
         : _bookingLevel(cur.bookings);
-    final bg = level == 0 ? crm.background : _heatScale[level - 1];
+    final bg = level == 0 ? Mkt.bg : _heatScale[level - 1];
     final darkCell = level >= 3; // top two levels need light text
-    final numColor = darkCell ? Colors.white : crm.textPrimary;
+    final numColor = darkCell ? Colors.white : Mkt.ink;
     final isToday = _isToday(date);
 
     final centerLabel = hasData
@@ -386,21 +349,21 @@ class _MarketingCalendarScreenState
 
     // Prodate = a peak EVENT day (>= _minProdate bookings). Gold ring + 🔥.
     final borderColor = isToday
-        ? crm.primary
-        : (isProdate ? _prodateColor : crm.border);
+        ? Mkt.primary
+        : (isProdate ? _prodateColor : Mkt.border);
     final borderWidth = isToday ? 1.6 : (isProdate ? 2.2 : 1.0);
 
     Widget cell = Tooltip(
-      richMessage: _tooltipSpan(crm, date, cur, prev, slot, isProdate),
+      richMessage: _tooltipSpan(date, cur, prev, slot, isProdate),
       waitDuration: const Duration(milliseconds: 150),
       preferBelow: false,
       decoration: BoxDecoration(
-        color: crm.textPrimary,
+        color: Mkt.ink,
         borderRadius: BorderRadius.circular(10),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: InkWell(
-        onTap: () => _showDayDetail(context, crm, date, cur, prev, slot, isProdate),
+        onTap: () => _showDayDetail(context, date, cur, prev, slot, isProdate),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
@@ -418,13 +381,19 @@ class _MarketingCalendarScreenState
                     const Text('🔥', style: TextStyle(fontSize: 10)),
                     2.wg,
                   ],
-                  Text('${date.day}',
-                      style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: darkCell
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : crm.textSecondary)),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text('${date.day}',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: darkCell
+                                  ? Colors.white.withValues(alpha: 0.9)
+                                  : Mkt.inkSoft)),
+                    ),
+                  ),
                   const Spacer(),
                   if (slot != null && _isFutureOrToday(date)) _slotChip(slot, darkCell),
                 ],
@@ -439,7 +408,7 @@ class _MarketingCalendarScreenState
                 ),
               ),
               if (curV > 0 || prevV > 0)
-                _yoyMini(crm, curV - prevV, darkCell),
+                _yoyMini(curV - prevV, darkCell),
             ],
           ),
         ),
@@ -453,7 +422,7 @@ class _MarketingCalendarScreenState
   }
 
   // Tiny YoY indicator inside a day cell.
-  Widget _yoyMini(CrmTheme crm, double delta, bool darkCell) {
+  Widget _yoyMini(double delta, bool darkCell) {
     final up = delta >= 0;
     final flat = delta == 0;
     // On deep-green cells, use bright tints so the ▲/▼ stays legible.
@@ -461,7 +430,7 @@ class _MarketingCalendarScreenState
         ? Colors.white.withValues(alpha: 0.85)
         : darkCell
             ? (up ? const Color(0xFFB9F6CA) : const Color(0xFFFFCDD2))
-            : (up ? const Color(0xFF15803D) : const Color(0xFFDC2626));
+            : (up ? Mkt.good : Mkt.bad);
     final label = flat
         ? '='
         : '${up ? '▲' : '▼'}${_compact(delta.abs())}';
@@ -476,7 +445,7 @@ class _MarketingCalendarScreenState
   }
 
   InlineSpan _tooltipSpan(
-      CrmTheme crm, DateTime date, DayStat cur, DayStat prev, DaySlot? slot,
+      DateTime date, DayStat cur, DayStat prev, DaySlot? slot,
       bool isProdate) {
     final white = const TextStyle(color: Colors.white, fontSize: 11.5);
     final whiteBold = const TextStyle(
@@ -528,7 +497,7 @@ class _MarketingCalendarScreenState
     ]);
   }
 
-  void _showDayDetail(BuildContext context, CrmTheme crm, DateTime date,
+  void _showDayDetail(BuildContext context, DateTime date,
       DayStat cur, DayStat prev, DaySlot? slot, bool isProdate) {
     final dB = cur.bookings - prev.bookings;
     final dR = cur.revenue - prev.revenue;
@@ -538,12 +507,12 @@ class _MarketingCalendarScreenState
       // resolves to the shell Navigator and pops the whole route instead of
       // just this dialog. Matches the other dialogs in this file.
       builder: (dctx) => AlertDialog(
-        backgroundColor: crm.surface,
+        backgroundColor: Mkt.card,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('${_dow(date)}, ${date.day} ${_monShort(date.month)} ${date.year}',
             style: TextStyle(
-                color: crm.textPrimary,
+                color: Mkt.ink,
                 fontWeight: FontWeight.w800,
                 fontSize: 17)),
         content: Column(
@@ -575,31 +544,31 @@ class _MarketingCalendarScreenState
               ),
               12.hg,
             ],
-            _detailRow(crm, '${date.year}', cur, highlight: true),
+            _detailRow('${date.year}', cur, highlight: true),
             10.hg,
             _detailRow(
-                crm, '${date.year - 1} (same date)', prev,
+                '${date.year - 1} (same date)', prev,
                 highlight: false),
             12.hg,
-            Divider(color: crm.border, height: 1),
+            Divider(color: Mkt.border, height: 1),
             12.hg,
             Row(
               children: [
                 Expanded(
-                  child: _deltaLine(crm, 'Bookings',
+                  child: _deltaLine('Bookings',
                       '${dB >= 0 ? '+' : ''}$dB', _pct(cur.bookings.toDouble(), prev.bookings.toDouble())),
                 ),
                 Expanded(
-                  child: _deltaLine(crm, 'Revenue',
+                  child: _deltaLine('Revenue',
                       '${dR >= 0 ? '+' : ''}${_money(dR)}', _pct(cur.revenue, prev.revenue)),
                 ),
               ],
             ),
             if (slot != null && _isFutureOrToday(date)) ...[
               12.hg,
-              Divider(color: crm.border, height: 1),
+              Divider(color: Mkt.border, height: 1),
               12.hg,
-              _slotDetail(crm, slot),
+              _slotDetail(slot),
             ],
           ],
         ),
@@ -613,42 +582,42 @@ class _MarketingCalendarScreenState
     );
   }
 
-  Widget _detailRow(CrmTheme crm, String label, DayStat s,
+  Widget _detailRow(String label, DayStat s,
       {required bool highlight}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: highlight
-            ? crm.primary.withValues(alpha: 0.08)
-            : crm.background,
+            ? Mkt.primary.withValues(alpha: 0.08)
+            : Mkt.bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border),
+        border: Border.all(color: Mkt.border),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(label,
                 style: TextStyle(
-                    fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                    fontWeight: FontWeight.w700, color: Mkt.ink)),
           ),
           Text('${s.bookings} booking${s.bookings == 1 ? '' : 's'}',
               style: TextStyle(
-                  fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                  fontWeight: FontWeight.w800, color: Mkt.ink)),
           if (s.revenue > 0) ...[
             8.wg,
             Text(_money(s.revenue),
-                style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                style: TextStyle(fontSize: 12, color: Mkt.inkSoft)),
           ],
         ],
       ),
     );
   }
 
-  Widget _deltaLine(CrmTheme crm, String label, String delta, double? pct) {
+  Widget _deltaLine(String label, String delta, double? pct) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+        Text(label, style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
         4.hg,
         Row(
           children: [
@@ -656,7 +625,7 @@ class _MarketingCalendarScreenState
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
-                    color: crm.textPrimary)),
+                    color: Mkt.ink)),
             6.wg,
             _deltaChip(pct),
           ],
@@ -665,7 +634,7 @@ class _MarketingCalendarScreenState
     );
   }
 
-  Widget _legend(CrmTheme crm, bool showSlots, bool showProdate) {
+  Widget _legend(bool showSlots, bool showProdate) {
     Widget item(Color c, String label) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -675,12 +644,12 @@ class _MarketingCalendarScreenState
               decoration: BoxDecoration(
                 color: c,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: crm.border),
+                border: Border.all(color: Mkt.border),
               ),
             ),
             5.wg,
             Text(label,
-                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+                style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
           ],
         );
     final labels =
@@ -694,19 +663,21 @@ class _MarketingCalendarScreenState
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: crm.textSecondary)),
+                color: Mkt.inkSoft)),
         for (var i = 0; i < _heatScale.length; i++)
           item(_heatScale[i], labels[i]),
         16.wg,
         Text('▲/▼ vs same day last year',
-            style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
         if (showSlots) ...[
           16.wg,
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.event_seat_outlined, size: 13, color: crm.textSecondary),
+            Icon(Icons.event_seat_outlined, size: 13, color: Mkt.inkSoft),
             5.wg,
-            Text('N = slots left (blue) · full (red), today & later',
-                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            Flexible(
+              child: Text('N = slots left (blue) · full (red), today & later',
+                  style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
+            ),
           ]),
         ],
         if (showProdate) ...[
@@ -721,8 +692,10 @@ class _MarketingCalendarScreenState
               ),
             ),
             5.wg,
-            Text('🔥 prodate (≥ $_minProdate bookings)',
-                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            Flexible(
+              child: Text('🔥 prodate (≥ $_minProdate bookings)',
+                  style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
+            ),
           ]),
         ],
       ],
@@ -732,7 +705,7 @@ class _MarketingCalendarScreenState
   // Compact per-cell "slots left" badge (event-date mode, today & future).
   Widget _slotChip(DaySlot slot, bool darkCell) {
     final full = slot.unavailable;
-    final base = full ? const Color(0xFFDC2626) : const Color(0xFF0369A1);
+    final base = full ? Mkt.bad : Mkt.blue;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
       decoration: BoxDecoration(
@@ -748,32 +721,32 @@ class _MarketingCalendarScreenState
   }
 
   // Full slot-availability breakdown for the day-detail dialog.
-  Widget _slotDetail(CrmTheme crm, DaySlot slot) {
+  Widget _slotDetail(DaySlot slot) {
     final full = slot.unavailable;
     Widget half(String label, SlotHalf h) => Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            Text(label, style: TextStyle(fontSize: 11, color: Mkt.inkSoft)),
             4.hg,
             Text('${h.available} left',
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
-                    color: h.isFull ? const Color(0xFFDC2626) : crm.textPrimary)),
+                    color: h.isFull ? Mkt.bad : Mkt.ink)),
             Text('${h.booked}/${h.capacity} booked',
-                style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+                style: TextStyle(fontSize: 10.5, color: Mkt.inkSoft)),
           ]),
         );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Icon(Icons.event_seat_outlined, size: 15, color: crm.textSecondary),
+        Icon(Icons.event_seat_outlined, size: 15, color: Mkt.inkSoft),
         6.wg,
         Text('Slot availability',
-            style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
+            style: TextStyle(fontWeight: FontWeight.w800, color: Mkt.ink)),
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: (full ? const Color(0xFFDC2626) : const Color(0xFF16A34A))
+            color: (full ? Mkt.bad : Mkt.good)
                 .withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(100),
           ),
@@ -784,7 +757,7 @@ class _MarketingCalendarScreenState
             style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w800,
-                color: full ? const Color(0xFFDC2626) : const Color(0xFF16A34A)),
+                color: full ? Mkt.bad : Mkt.good),
           ),
         ),
       ]),
@@ -793,53 +766,17 @@ class _MarketingCalendarScreenState
     ]);
   }
 
-  // ── Controls: metric (Bookings|Revenue) + date basis (Event|Sales) ──
-  // [prodates] non-null (event mode) → show the Prodate Finder controls.
-  Widget _controlsRow(CrmTheme crm, String basis, List<_Prodate>? prodates) {
-    Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: active ? crm.primary : Colors.transparent,
-              borderRadius: BorderRadius.circular(100),
-            ),
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : crm.textSecondary)),
-          ),
-        );
-    Widget group(List<Widget> children) => Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: crm.surface,
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(color: crm.border),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: children),
-        );
+  // ── Prodate finder controls (event-date mode only) ──
+  // The metric (Bookings|Revenue) and the date basis (Event|Sales) live in the page header.
+  Widget _prodateControls(List<_Prodate> prodates) {
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        group([
-          seg('Bookings', !_revenue, () => setState(() => _revenue = false)),
-          seg('Revenue', _revenue, () => setState(() => _revenue = true)),
-        ]),
-        group([
-          seg('Event date', basis == 'event',
-              () => ref.read(calendarBasisProvider.notifier).state = 'event'),
-          seg('Sales date', basis == 'sales',
-              () => ref.read(calendarBasisProvider.notifier).state = 'sales'),
-        ]),
         // Two small pills (not one wide one) so they wrap cleanly on phones.
-        if (prodates != null) ...[
-          _prodateThresholdPill(crm),
-          _prodateViewPill(crm, prodates),
-        ],
+        _prodateThresholdPill(),
+        _prodateViewPill(prodates),
       ],
     );
   }
@@ -851,7 +788,7 @@ class _MarketingCalendarScreenState
       );
 
   // Pill 1: adjustable "Prodate ≥ N" threshold with −/+ steppers.
-  Widget _prodateThresholdPill(CrmTheme crm) {
+  Widget _prodateThresholdPill() {
     Widget stepBtn(IconData icon, VoidCallback onTap) => InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(100),
@@ -875,7 +812,7 @@ class _MarketingCalendarScreenState
           width: 22,
           child: Text('$_minProdate',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Mkt.ink)),
         ),
         stepBtn(Icons.add_circle_outline,
             () => setState(() => _minProdate = (_minProdate + 1).clamp(2, 200))),
@@ -884,7 +821,7 @@ class _MarketingCalendarScreenState
   }
 
   // Pill 2: "Only" toggle + tappable "N this year" opening the year list.
-  Widget _prodateViewPill(CrmTheme crm, List<_Prodate> prodates) {
+  Widget _prodateViewPill(List<_Prodate> prodates) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: _prodatePillDeco,
@@ -903,7 +840,7 @@ class _MarketingCalendarScreenState
         6.wg,
         // Tap → the whole-year prodate list (no month navigation needed).
         InkWell(
-          onTap: () => _showProdatesDialog(crm, prodates),
+          onTap: () => _showProdatesDialog(prodates),
           borderRadius: BorderRadius.circular(100),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -922,7 +859,7 @@ class _MarketingCalendarScreenState
 
   // The whole-year prodate list in one dialog — every peak event date, grouped
   // by month, so the team sees them all without paging the calendar.
-  void _showProdatesDialog(CrmTheme crm, List<_Prodate> prodates) {
+  void _showProdatesDialog(List<_Prodate> prodates) {
     final year = ref.read(calendarYearProvider);
     showDialog<void>(
       context: context,
@@ -932,7 +869,7 @@ class _MarketingCalendarScreenState
           constraints: const BoxConstraints(maxWidth: 460),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: crm.surface,
+            color: Mkt.card,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Column(
@@ -950,17 +887,17 @@ class _MarketingCalendarScreenState
                           style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w900,
-                              color: crm.textPrimary)),
+                              color: Mkt.ink)),
                       2.hg,
                       Text('${prodates.length} peak day${prodates.length == 1 ? '' : 's'} · ≥ $_minProdate bookings',
-                          style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                          style: TextStyle(fontSize: 12, color: Mkt.inkSoft)),
                     ],
                   ),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   onPressed: () => Navigator.pop(dctx),
-                  icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
+                  icon: Icon(Icons.close, size: 18, color: Mkt.inkSoft),
                 ),
               ]),
               14.hg,
@@ -969,7 +906,7 @@ class _MarketingCalendarScreenState
                   padding: const EdgeInsets.symmetric(vertical: 28),
                   child: Center(
                     child: Text('No prodates at ≥ $_minProdate bookings this year.',
-                        style: TextStyle(color: crm.textSecondary)),
+                        style: TextStyle(color: Mkt.inkSoft)),
                   ),
                 )
               else
@@ -977,7 +914,7 @@ class _MarketingCalendarScreenState
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _prodateRows(dctx, crm, prodates),
+                      children: _prodateRows(dctx, prodates),
                     ),
                   ),
                 ),
@@ -989,7 +926,7 @@ class _MarketingCalendarScreenState
   }
 
   // Prodate rows grouped under month headers (chronological).
-  List<Widget> _prodateRows(BuildContext dctx, CrmTheme crm, List<_Prodate> prodates) {
+  List<Widget> _prodateRows(BuildContext dctx, List<_Prodate> prodates) {
     final rows = <Widget>[];
     int? lastMonth;
     for (final p in prodates) {
@@ -1001,7 +938,7 @@ class _MarketingCalendarScreenState
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: crm.textSecondary,
+                  color: Mkt.inkSoft,
                   letterSpacing: 0.3)),
         ));
       }
@@ -1031,7 +968,7 @@ class _MarketingCalendarScreenState
             Expanded(
               child: Text('${_dow(p.date)}, ${p.date.day} ${_monShort(p.date.month)} ${p.date.year}',
                   style: TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                      fontSize: 13.5, fontWeight: FontWeight.w700, color: Mkt.ink)),
             ),
             Text('${p.bookings} bookings',
                 style: const TextStyle(
@@ -1039,10 +976,10 @@ class _MarketingCalendarScreenState
             if (p.revenue > 0) ...[
               8.wg,
               Text(_money(p.revenue),
-                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                  style: TextStyle(fontSize: 12, color: Mkt.inkSoft)),
             ],
             4.wg,
-            Icon(Icons.chevron_right, size: 16, color: crm.textSecondary),
+            Icon(Icons.chevron_right, size: 16, color: Mkt.inkSoft),
           ]),
         ),
       ));
@@ -1056,45 +993,22 @@ class _MarketingCalendarScreenState
   static const int _maxYear = 2035;
 
   // Trigger button that opens the year-grid picker.
-  Widget _yearButton(CrmTheme crm, int value) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => _pickYear(crm, value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: crm.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.calendar_month_outlined, size: 16, color: crm.primary),
-            8.wg,
-            Text('$value',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: crm.textPrimary)),
-            2.wg,
-            Icon(Icons.keyboard_arrow_down, size: 18, color: crm.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _yearButton(int value) => MktPill(
+        label: '$value',
+        icon: Icons.calendar_month_outlined,
+        onTap: () => _pickYear(value),
+      );
 
   // A calendar-style year picker: a grid of years, current selection filled,
   // "this year" ringed. Nicer + far more scannable than a long dropdown.
-  Future<void> _pickYear(CrmTheme crm, int selected) async {
+  Future<void> _pickYear(int selected) async {
     final now = DateTime.now().year;
     final years = [for (var y = _minYear; y <= _maxYear; y++) y];
 
     final picked = await showDialog<int>(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: crm.surface,
+        backgroundColor: Mkt.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
@@ -1105,18 +1019,18 @@ class _MarketingCalendarScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Icon(Icons.calendar_month_outlined, size: 18, color: crm.primary),
+                  Icon(Icons.calendar_month_outlined, size: 18, color: Mkt.primary),
                   8.wg,
                   Text('Select year',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
-                          color: crm.textPrimary)),
+                          color: Mkt.ink)),
                   const Spacer(),
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     onPressed: () => Navigator.pop(ctx),
-                    icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
+                    icon: Icon(Icons.close, size: 18, color: Mkt.inkSoft),
                   ),
                 ]),
                 14.hg,
@@ -1131,7 +1045,7 @@ class _MarketingCalendarScreenState
                       childAspectRatio: 2.2,
                       children: [
                         for (final y in years)
-                          _yearTile(crm, y, y == selected, y == now,
+                          _yearTile(y, y == selected, y == now,
                               () => Navigator.pop(ctx, y)),
                       ],
                     ),
@@ -1151,12 +1065,12 @@ class _MarketingCalendarScreenState
   }
 
   Widget _yearTile(
-      CrmTheme crm, int year, bool selected, bool isNow, VoidCallback onTap) {
+      int year, bool selected, bool isNow, VoidCallback onTap) {
     final borderColor = selected
-        ? crm.primary
-        : (isNow ? crm.primary.withValues(alpha: 0.55) : crm.border);
+        ? Mkt.primary
+        : (isNow ? Mkt.primary.withValues(alpha: 0.55) : Mkt.border);
     return Material(
-      color: selected ? crm.primary : crm.background,
+      color: selected ? Mkt.primary : Mkt.bg,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1175,7 +1089,7 @@ class _MarketingCalendarScreenState
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : crm.textPrimary)),
+                      color: selected ? Colors.white : Mkt.ink)),
               if (isNow)
                 Text('this year',
                     style: TextStyle(
@@ -1183,7 +1097,7 @@ class _MarketingCalendarScreenState
                         fontWeight: FontWeight.w600,
                         color: selected
                             ? Colors.white.withValues(alpha: 0.85)
-                            : crm.textSecondary)),
+                            : Mkt.inkSoft)),
             ],
           ),
         ),
@@ -1191,14 +1105,14 @@ class _MarketingCalendarScreenState
     );
   }
 
-  Widget _navBtn(CrmTheme crm, IconData icon, VoidCallback onTap) => IconButton(
+  Widget _navBtn(IconData icon, VoidCallback onTap) => IconButton(
         onPressed: onTap,
-        icon: Icon(icon, color: crm.textPrimary),
+        icon: Icon(icon, color: Mkt.ink),
         style: IconButton.styleFrom(
-          backgroundColor: crm.background,
+          backgroundColor: Mkt.bg,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: crm.border)),
+              side: BorderSide(color: Mkt.border)),
         ),
       );
 
@@ -1240,44 +1154,24 @@ class _MarketingCalendarScreenState
       return const SizedBox.shrink();
     }
     final up = pct >= 0;
-    final color = pct == 0
-        ? const Color(0xFF6B7280)
-        : (up ? const Color(0xFF16A34A) : const Color(0xFFDC2626));
+    final color = pct == 0 ? Mkt.inkSoft : (up ? Mkt.good : Mkt.bad);
     final label = pct == 0
         ? '0%'
         : '${up ? '▲' : '▼'} ${pct.abs().toStringAsFixed(0)}%';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w800, color: color)),
-    );
+    return MktChip(label, color: color);
   }
 
-  Widget _card(CrmTheme crm, String title, Widget child, {String? subtitle}) =>
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: crm.border),
-        ),
+  Widget _card(String title, Widget child, {String? subtitle, IconData? icon}) =>
+      MktCard(
+        title: title,
+        icon: icon,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800, color: crm.textPrimary)),
             if (subtitle != null) ...[
-              2.hg,
-              Text(subtitle,
-                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+              Text(subtitle, style: mktText(11.5, color: Mkt.inkSoft)),
+              12.hg,
             ],
-            14.hg,
             child,
           ],
         ),
@@ -1385,11 +1279,10 @@ class _MarketingCalendarScreenState
 
 // ── 12-month this-year vs last-year grouped bars ──────────────────────────────
 class _MonthStrip extends StatelessWidget {
-  final CrmTheme crm;
   final CalendarComparison data;
   final bool revenue;
   const _MonthStrip(
-      {required this.crm, required this.data, required this.revenue});
+      {required this.data, required this.revenue});
 
   double _cur(MonthYoY m) => revenue ? m.curRevenue : m.curBookings.toDouble();
   double _prev(MonthYoY m) => revenue ? m.prevRevenue : m.prevBookings.toDouble();
@@ -1403,20 +1296,20 @@ class _MonthStrip extends StatelessWidget {
     final months = data.byMonth;
     if (months.isEmpty) {
       return Text('No data.',
-          style: TextStyle(color: crm.textSecondary, fontSize: 13));
+          style: TextStyle(color: Mkt.inkSoft, fontSize: 13));
     }
     double maxV = 1;
     for (final m in months) {
       maxV = [maxV, _cur(m), _prev(m)].reduce((a, b) => a > b ? a : b);
     }
-    final prevColor = crm.textSecondary.withValues(alpha: 0.45);
+    final prevColor = Mkt.grey.withValues(alpha: 0.6);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            _legendDot(crm.primary, '${data.year}'),
+            _legendDot(Mkt.primaryLight, '${data.year}'),
             16.wg,
             _legendDot(prevColor, '${data.prevYear}'),
           ],
@@ -1429,7 +1322,7 @@ class _MonthStrip extends StatelessWidget {
             maxY: maxV * 1.15,
             barTouchData: BarTouchData(
               touchTooltipData: BarTouchTooltipData(
-                getTooltipColor: (_) => crm.textPrimary,
+                getTooltipColor: (_) => Mkt.ink,
                 getTooltipItem: (group, _, rod, rodIndex) {
                   final m = months[group.x];
                   final isCur = rodIndex == 0;
@@ -1458,7 +1351,7 @@ class _MonthStrip extends StatelessWidget {
               show: true,
               drawVerticalLine: false,
               getDrawingHorizontalLine: (_) =>
-                  FlLine(color: crm.border, strokeWidth: 0.6),
+                  FlLine(color: Mkt.border, strokeWidth: 0.6),
             ),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
@@ -1472,7 +1365,7 @@ class _MonthStrip extends StatelessWidget {
                   reservedSize: 34,
                   getTitlesWidget: (v, _) => Text(
                     revenue ? _fmtCompact(v) : v.toInt().toString(),
-                    style: TextStyle(fontSize: 9, color: crm.textSecondary),
+                    style: TextStyle(fontSize: 9, color: Mkt.inkSoft),
                   ),
                 ),
               ),
@@ -1486,7 +1379,7 @@ class _MonthStrip extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(_MonthStrip._letters[i],
                           style: TextStyle(
-                              fontSize: 9.5, color: crm.textSecondary)),
+                              fontSize: 9.5, color: Mkt.inkSoft)),
                     );
                   },
                 ),
@@ -1503,7 +1396,7 @@ class _MonthStrip extends StatelessWidget {
                       width: 7,
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(2)),
-                      color: crm.primary,
+                      color: Mkt.primaryLight,
                     ),
                     BarChartRodData(
                       toY: _prev(months[i]),
@@ -1535,7 +1428,7 @@ class _MonthStrip extends StatelessWidget {
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: crm.textPrimary)),
+                  color: Mkt.ink)),
         ],
       );
 

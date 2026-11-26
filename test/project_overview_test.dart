@@ -359,7 +359,8 @@ void main() {
     testWidgets('manager, department, dates, phase and priority', (tester) async {
       await _pumpOverview(tester, project: _project(endDate: '2027-03-15T00:00:00.000Z'));
       final card = find.byKey(const Key('overview_details'));
-      for (final t in ['Project Details', 'Manager', 'Amna', 'Department', 'Marketing', 'Start Date', 'Due Date', '15 Mar 2027', 'Phase', 'Discovery', 'Priority', 'Medium']) {
+      // the phase is read in the owning department's steps: Discovery on a Marketing project is its Research step
+      for (final t in ['Project Details', 'Manager', 'Amna', 'Department', 'Marketing', 'Start Date', 'Due Date', '15 Mar 2027', 'Phase', 'Research', 'Priority', 'Medium']) {
         expect(find.descendant(of: card, matching: find.text(t)), findsOneWidget, reason: t);
       }
       expect(find.descendant(of: card, matching: find.text('3 Nov 2026')), findsOneWidget);
@@ -370,6 +371,20 @@ void main() {
       expect(find.textContaining('The project manager plans the tickets'), findsOneWidget);
       await _pumpOverview(tester);
       expect(find.textContaining('The project manager plans the tickets'), findsNothing);
+    });
+  });
+
+  group('project team', () {
+    testWidgets('the manager is on the Overview\'s team card, with Edit team for someone who runs the project', (tester) async {
+      await _pumpOverview(tester);
+      final card = find.byKey(const Key('project_people_card'));
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Amna')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.byKey(const Key('people_edit'))), findsOneWidget);
+      // the HR card is named for what it lists, so the two are not confused
+      expect(find.text('Team & manpower'), findsNothing);
+      await _pumpOverview(tester, project: _project(access: _access(canManage: false)));
+      expect(find.byKey(const Key('people_edit')), findsNothing);
     });
   });
 
@@ -544,7 +559,7 @@ void main() {
       expect(find.byKey(const Key('project_title')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('project_title'))).data, 'Lifestyle brand at 2030');
       expect(find.text('Strategic project to build our lifestyle brand.'), findsOneWidget);
-      expect(find.text('Gantt Plan Wizard'), findsOneWidget);
+      expect(find.text('Gratt Plan Wizard'), findsOneWidget);
       expect(find.text('Add Task'), findsOneWidget); // not an IT project: Task, not Ticket
       expect(find.byKey(const Key('project_more')), findsOneWidget);
     });
@@ -563,7 +578,7 @@ void main() {
 
     testWidgets('someone who may not add tasks has neither the wizard nor Add Task', (tester) async {
       await _pumpScreen(tester, project: _project(access: _access(canManage: false, canCreateTasks: false)));
-      expect(find.text('Gantt Plan Wizard'), findsNothing);
+      expect(find.text('Gratt Plan Wizard'), findsNothing);
       expect(find.text('Add Task'), findsNothing);
       expect(find.byKey(const Key('project_more')), findsOneWidget);
     });
@@ -595,7 +610,7 @@ void main() {
 
     testWidgets('on a phone the header stacks and nothing overflows', (tester) async {
       await _pumpScreen(tester, size: const Size(390, 900), events: [_event('Project created', 24)]);
-      expect(find.text('Gantt Plan Wizard'), findsOneWidget);
+      expect(find.text('Gratt Plan Wizard'), findsOneWidget);
       expect(find.byKey(const Key('overview_hero')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

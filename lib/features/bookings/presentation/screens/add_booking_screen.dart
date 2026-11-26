@@ -9,6 +9,10 @@ import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/booking_date_picker.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/allocation_sheet.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/allocation_preview_line.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/booking_allocation_result.dart';
+import 'package:nizan_crm/features/allocation/services/allocation_service.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/models/customer.dart';
@@ -25,6 +29,7 @@ import 'package:nizan_crm/core/widgets/pincode_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/calendar_extras.dart' show kInfluencerColor;
 
 // New Booking — redesigned (Oct 2026).
 //
@@ -69,6 +74,7 @@ class AddBookingScreen extends HookConsumerWidget {
       text: qParams['pincode'] ?? '',
     );
     final allowMissingEmail = useState(false);
+    final influencerWork = useState(false);
     final isSubmitting = useState(false);
     // When the booking was MADE (defaults to today; past-date a late entry).
     final bookedDate = useState<DateTime>(DateTime.now());
@@ -106,6 +112,19 @@ class AddBookingScreen extends HookConsumerWidget {
         l.addons.fold<double>(0, (s, a) => s + a.amount * a.persons);
 
     final allLines = [for (final d in days.value) ...d.lines];
+    // the artist preview (smart allocation): the packages as the booking will send them
+    final previewItems = <Map<String, dynamic>>[
+      for (final d in [...days.value]..sort((a, b) => a.date.compareTo(b.date)))
+        for (final l in d.lines)
+          {
+            'service': l.packageId == _kCustom ? l.customName.trim() : (pkgById(l.packageId)?.name ?? ''),
+            'eventSlot': l.slot.trim(),
+            'selectedDates': [_dateKey(d.date)],
+            'startTime': _hhmm(l.start),
+            'endTime': _hhmm(l.end),
+            'districtId': l.districtId,
+          },
+    ];
     final total = allLines.fold<double>(
       0,
       (s, l) => s + linePrice(l) + addonsOf(l),
@@ -382,6 +401,7 @@ class AddBookingScreen extends HookConsumerWidget {
         pincode: pincodeCtrl.text.trim(),
         email: emailCtrl.text.trim(),
         legacyBooking: allowMissingEmail.value,
+        influencerWork: influencerWork.value,
         service: services.join(' + '),
         eventSlot: slots.join(' | '),
         region: bookingDistrict?.regionName ?? '',
@@ -418,8 +438,9 @@ class AddBookingScreen extends HookConsumerWidget {
 
       isSubmitting.value = true;
       try {
+        Booking? created;
         try {
-          await ref.read(bookingProvider.notifier).addBooking(booking);
+          created = await ref.read(bookingProvider.notifier).addBooking(booking);
         } catch (error) {
           // The server refuses a second active booking for the same number on
           // the same date (usually the same booking saved twice). Only create
@@ -454,7 +475,7 @@ class AddBookingScreen extends HookConsumerWidget {
             ),
           );
           if (proceed != true) return;
-          await ref
+          created = await ref
               .read(bookingProvider.notifier)
               .addBooking(booking, allowDuplicate: true);
         }
@@ -480,6 +501,25 @@ class AddBookingScreen extends HookConsumerWidget {
           );
         // Go somewhere this user can open (sales roles often lack the calendar).
         final access = Access.of(ref.read(authSessionProvider));
+        // the smart allocation. Automatic allocation on: who the system gave the work to, or why it waits for CRM (sales see it
+        // too). Otherwise, for someone who allocates: who takes this new work (or Later — it waits on the Allocation Board).
+        if (created.id.isNotEmpty && access.canSeeBookingAllocation) {
+          final shown = await showBookingAllocationResult(context, ref, bookingId: created.id);
+          if (!context.mounted) return;
+          if (!shown && access.canAllocateArtists) {
+            var suggest = false;
+            try {
+              final st = await ref.read(allocationSettingsProvider.future);
+              suggest = st.suggest && st.canAllocate;
+            } catch (_) {
+              suggest = false;
+            }
+            if (suggest && context.mounted) {
+              await showAllocationSheet(context, bookingId: created.id, source: 'create', primaryLabel: 'Allocate', secondaryLabel: 'Later', onSecondary: () async {});
+            }
+            if (!context.mounted) return;
+          }
+        }
         if (isConversion && context.canPop()) {
           context.pop();
         } else if (access.canSeeCalendar) {
@@ -639,6 +679,8 @@ class AddBookingScreen extends HookConsumerWidget {
           ),
           // Road distance from HQ (HiLITE Business Park) + per-km estimate.
           HqDistanceLine(addressCtrl: addressCtrl, pincodeCtrl: pincodeCtrl),
+          // which artist team covers this area / would take it (once the allocation is On) — sales see it too
+          AllocationPreviewLine(pincodeCtrl: pincodeCtrl, items: previewItems),
           4.h,
           CheckboxListTile(
             value: allowMissingEmail.value,
@@ -650,6 +692,17 @@ class AddBookingScreen extends HookConsumerWidget {
             subtitle: const Text(
               'Saves without a real email; the confirmation email is skipped.',
             ),
+          ),
+          CheckboxListTile(
+            key: const Key('ab_influencer_work'),
+            value: influencerWork.value,
+            onChanged: (v) => influencerWork.value = v ?? false,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            activeColor: kInfluencerColor,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Influencer work'),
+            subtitle: const Text('Shows in its own colour on the calendar.'),
           ),
         ],
       ),

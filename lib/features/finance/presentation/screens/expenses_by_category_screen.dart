@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -480,8 +481,10 @@ class _ExpensesByCategoryScreenState
     final expenses =
         all.where((e) => e.status == 'approved' && _inRange(e.date)).toList()
           ..sort((a, b) => b.date.compareTo(a.date));
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      ['Expenses by Category'],
+      ['Expenses by Category', 'Period: ${period.label}'],
       ['Date', 'Category', 'Title', 'Vendor', 'GST', 'Amount', 'Status'],
       for (final e in expenses)
         [
@@ -495,7 +498,7 @@ class _ExpensesByCategoryScreenState
         ],
     ];
     try {
-      await downloadCsv('expenses_by_category.csv', rows);
+      await downloadCsv('expenses_by_category_${period.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Expenses exported')));

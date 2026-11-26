@@ -361,6 +361,7 @@ class DataRefresh {
         acc.reconciliationProvider,
         acc.bankAccountsProvider,
         bank.bankAccountsProvider,
+        bank.bankStatementProvider, // an account's statement moves with every posting
         salesReportProvider,
         monthEndReviewProvider,
         departmentReportProvider,
@@ -378,7 +379,7 @@ class DataRefresh {
       ]);
 
   void bankAccounts() {
-    _all(_inv, [acc.bankAccountsProvider, bank.bankAccountsProvider]);
+    _all(_inv, [acc.bankAccountsProvider, bank.bankAccountsProvider, bank.bankStatementProvider]);
     financeReports();
   }
 

@@ -52,23 +52,46 @@ class MarketingTeamService {
   }
 
   Future<TeamOverview> overview(TeamFilter f) => _get('load the team dashboard', '/overview', TeamOverview.fromJson, query: f.query);
-  Future<TeamActivityFeed> activity(TeamFilter f, {String? group, String? kind, int limit = 100}) =>
-      _get('load the team activity', '/activity', TeamActivityFeed.fromJson, query: {...f.query, 'group': ?group, 'kind': ?kind, 'limit': limit});
+  /// The feed, cut on the server by [q] (kind, category, project, member); the views and the summary are always of the whole period.
+  Future<TeamActivityFeed> activity(TeamFilter f, {ActivityQuery q = const ActivityQuery(), int limit = 100, int page = 1}) =>
+      _get('load the team activity', '/activity', TeamActivityFeed.fromJson, query: {...f.query, ...q.query, if (q.memberId != null) 'memberId': q.memberId, 'limit': limit, 'page': page});
   Future<Timesheet> timesheet(TeamFilter f) => _get('load the timesheet', '/timesheet', Timesheet.fromJson, query: f.query);
+  Future<DailyLogs> logs(TeamFilter f, {int page = 1, int limit = 50}) => _get('load the daily logs', '/logs', DailyLogs.fromJson, query: {...f.query, 'page': page, 'limit': limit});
   Future<PerformanceData> performance(TeamFilter f) => _get('load performance', '/performance', PerformanceData.fromJson, query: f.query);
-  Future<AttendanceData> attendance(String date) => _get('load attendance', '/attendance', AttendanceData.fromJson, query: {'date': date});
-  Future<TeamReport> report(String type, TeamFilter f) => _get('build the report', '/reports/$type', TeamReport.fromJson, query: f.query);
+
+  /// The attendance board for [date], for the filter's brand (which shoot logs count) and member (whose rows).
+  Future<AttendanceData> attendance(String date, {TeamFilter? f}) =>
+      _get('load attendance', '/attendance', AttendanceData.fromJson, query: {'date': date, if (f != null) 'brand': f.brand.wire, if (f?.memberId != null) 'memberId': f!.memberId});
+
+  /// A report's rows: [day] picks the daily report's day (today when not given), [month] the monthly report's month (YYYY-MM).
+  Future<TeamReport> report(String type, TeamFilter f, {String? day, String? month}) =>
+      _get('build the report', '/reports/$type', TeamReport.fromJson, query: {...f.query, 'day': ?day, 'month': ?month});
+
+  /// Say how a member is working on a day (Office / On Shoot / Work From Home); null takes it back. Throws [TeamRefusal] for what it explains.
+  Future<void> setWorkMode(WorkMode? mode, {String? day, String? memberId}) async {
+    try {
+      await _dio.put('/marketing/team/work-mode', data: {'mode': mode?.wire, 'day': ?day, 'memberId': ?memberId});
+    } on DioException catch (e) {
+      throw _refusal(e) ?? AppException(e, action: 'set the work mode');
+    } catch (e) {
+      throw AppException(e, action: 'set the work mode');
+    }
+  }
 
   Future<LogSetup> logSetup({required String date, String? memberId}) => _get('open the log form', '/log-setup', LogSetup.fromJson, query: {'date': date, 'memberId': ?memberId});
 
-  Future<TeamTaskList> tasks(TeamFilter f, {String status = 'all', String priority = 'all', String? q, bool mineOnly = false}) {
+  /// The tasks for the filter's range (open now, done in it, or due in it — the dashboard's rule) and brand, for [scope]; a
+  /// Coordinations request given to a member comes in as one of their tasks.
+  Future<TeamTaskList> tasks(TeamFilter f, {String status = 'all', String priority = 'all', String? q, TaskScope scope = TaskScope.all}) {
     final search = q?.trim() ?? '';
     return _get('load tasks', '/tasks', TeamTaskList.fromJson, query: {
+      'from': f.fromDay,
+      'to': f.toDay,
       'brand': f.brand.wire,
       'status': status,
       'priority': priority,
       if (search.isNotEmpty) 'q': search,
-      if (mineOnly) 'scope': 'mine',
+      if (scope != TaskScope.all) 'scope': scope.wire,
       'assigneeId': ?f.memberId,
     });
   }
@@ -140,14 +163,20 @@ final marketingTeamServiceProvider = Provider<MarketingTeamService>((ref) => Mar
 final teamFilterProvider = StateProvider<TeamFilter>((ref) => TeamFilter.thisWeek());
 
 // A failing section must say so rather than spin for ever.
-final teamOverviewProvider = FutureProvider.autoDispose<TeamOverview>((ref) => ref.watch(marketingTeamServiceProvider).overview(ref.watch(teamFilterProvider)), retry: (_, _) => null);
-final teamActivityProvider = FutureProvider.autoDispose<TeamActivityFeed>((ref) => ref.watch(marketingTeamServiceProvider).activity(ref.watch(teamFilterProvider)), retry: (_, _) => null);
-final teamTimesheetProvider = FutureProvider.autoDispose<Timesheet>((ref) => ref.watch(marketingTeamServiceProvider).timesheet(ref.watch(teamFilterProvider)), retry: (_, _) => null);
-final teamPerformanceProvider = FutureProvider.autoDispose<PerformanceData>((ref) => ref.watch(marketingTeamServiceProvider).performance(ref.watch(teamFilterProvider)), retry: (_, _) => null);
-final teamTasksProvider = FutureProvider.autoDispose<TeamTaskList>((ref) => ref.watch(marketingTeamServiceProvider).tasks(ref.watch(teamFilterProvider)), retry: (_, _) => null);
+/// The Team Activity tab's own cut (kind, and the row of a view it was narrowed to) and the Tasks tab's scope.
+final teamActivityQueryProvider = StateProvider<ActivityQuery>((ref) => const ActivityQuery());
+final teamTaskScopeProvider = StateProvider<TaskScope>((ref) => TaskScope.all);
+final teamLogsPageProvider = StateProvider<int>((ref) => 1);
 
-/// The attendance board for one day (the Attendance tab picks it).
-final teamAttendanceProvider = FutureProvider.autoDispose.family<AttendanceData, String>((ref, date) => ref.watch(marketingTeamServiceProvider).attendance(date), retry: (_, _) => null);
+final teamOverviewProvider = FutureProvider.autoDispose<TeamOverview>((ref) => ref.watch(marketingTeamServiceProvider).overview(ref.watch(teamFilterProvider)), retry: (_, _) => null);
+final teamActivityProvider = FutureProvider.autoDispose<TeamActivityFeed>((ref) => ref.watch(marketingTeamServiceProvider).activity(ref.watch(teamFilterProvider), q: ref.watch(teamActivityQueryProvider)), retry: (_, _) => null);
+final teamTimesheetProvider = FutureProvider.autoDispose<Timesheet>((ref) => ref.watch(marketingTeamServiceProvider).timesheet(ref.watch(teamFilterProvider)), retry: (_, _) => null);
+final teamLogsProvider = FutureProvider.autoDispose<DailyLogs>((ref) => ref.watch(marketingTeamServiceProvider).logs(ref.watch(teamFilterProvider), page: ref.watch(teamLogsPageProvider)), retry: (_, _) => null);
+final teamPerformanceProvider = FutureProvider.autoDispose<PerformanceData>((ref) => ref.watch(marketingTeamServiceProvider).performance(ref.watch(teamFilterProvider)), retry: (_, _) => null);
+final teamTasksProvider = FutureProvider.autoDispose<TeamTaskList>((ref) => ref.watch(marketingTeamServiceProvider).tasks(ref.watch(teamFilterProvider), scope: ref.watch(teamTaskScopeProvider)), retry: (_, _) => null);
+
+/// The attendance board for one day (the Attendance tab picks it), for the shared brand and member filter.
+final teamAttendanceProvider = FutureProvider.autoDispose.family<AttendanceData, String>((ref, date) => ref.watch(marketingTeamServiceProvider).attendance(date, f: ref.watch(teamFilterProvider)), retry: (_, _) => null);
 
 /// What the Log Activity form needs for a date (and, for a manager, a member).
 typedef LogSetupKey = ({String date, String? memberId});
@@ -158,6 +187,7 @@ void refreshTeam(WidgetRef ref) {
   ref.invalidate(teamOverviewProvider);
   ref.invalidate(teamActivityProvider);
   ref.invalidate(teamTimesheetProvider);
+  ref.invalidate(teamLogsProvider);
   ref.invalidate(teamPerformanceProvider);
   ref.invalidate(teamTasksProvider);
   ref.invalidate(teamAttendanceProvider);

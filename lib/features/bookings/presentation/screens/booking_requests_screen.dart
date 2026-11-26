@@ -7,6 +7,62 @@ import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mod
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/crm/data/crm_models.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
+import 'package:nizan_crm/features/crm/services/crm_service.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/allocation_sheet.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/booking_allocation_result.dart';
+import 'package:nizan_crm/features/allocation/services/allocation_service.dart';
+import 'package:go_router/go_router.dart';
+
+/// Confirms a booking request. With automatic allocation on, the status is saved and the server gives the work to the best team at once
+/// when it is a clean match — the result (or why it waits for CRM) is shown, with "Allocate now" / "Change team". With the allocation
+/// suggesting (not automatic) and a person who may allocate, "who takes it" opens first: Confirm & allocate (the status, then the team)
+/// or Confirm without artist (it waits on the Allocation Board). Otherwise only the status, as before. → true when confirmed.
+Future<bool> confirmBookingRequest(BuildContext context, WidgetRef ref, Booking booking) async {
+  Future<void> confirm() => ref.read(bookingProvider.notifier).updateBooking(booking.copyWith(status: 'confirmed'));
+  final access = Access.of(ref.read(authSessionProvider));
+  var useSheet = false;
+  var auto = false;
+  if (access.canAllocateArtists) {
+    try {
+      final s = await ref.read(allocationSettingsProvider.future);
+      useSheet = s.suggest && s.canAllocate;
+      auto = s.autoOn;
+    } catch (_) {
+      useSheet = false; // the settings can't be read: confirm as before
+    }
+  }
+  if (auto && context.mounted) {
+    await confirm();
+    if (context.mounted) await showBookingAllocationResult(context, ref, bookingId: booking.id);
+    return true;
+  }
+  if (!useSheet || !context.mounted) {
+    await confirm();
+    return true;
+  }
+  var confirmed = false;
+  await showAllocationSheet(
+    context,
+    bookingId: booking.id,
+    source: 'requests',
+    primaryLabel: 'Confirm & allocate',
+    secondaryLabel: 'Confirm without artist',
+    beforeConfirm: () async {
+      await confirm();
+      confirmed = true;
+      return true;
+    },
+    onSecondary: () async {
+      await confirm();
+      confirmed = true;
+    },
+  );
+  return confirmed;
+}
 
 class BookingRequestsScreen extends ConsumerStatefulWidget {
   const BookingRequestsScreen({super.key});
@@ -20,6 +76,20 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   final Set<String> _selectedIds = <String>{};
   bool _bulkSaving = false;
   String? _activeBookingId;
+  // CRM: whose requests to show — all | mine | unassigned
+  String _ownerFilter = 'all';
+
+  /// Is the smart allocation suggesting, for someone who may allocate (the confirmed works then go to the Allocation Board)? [auto] —
+  /// clean matches were given their team automatically as they were confirmed.
+  Future<({bool on, bool auto})> _allocationOn() async {
+    if (!Access.of(ref.read(authSessionProvider)).canAllocateArtists) return (on: false, auto: false);
+    try {
+      final s = await ref.read(allocationSettingsProvider.future);
+      return (on: s.suggest && s.canAllocate, auto: s.autoOn);
+    } catch (_) {
+      return (on: false, auto: false);
+    }
+  }
 
   Future<void> _updateStatus(Booking booking, String status) async {
     await ref
@@ -30,7 +100,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   // Accept a single request straight from its card (no dialog needed).
   Future<void> _acceptSingle(Booking booking) async {
     try {
-      await _updateStatus(booking, 'confirmed');
+      if (!await confirmBookingRequest(context, ref, booking)) return;
       if (mounted) {
         setState(() => _selectedIds.remove(booking.id));
         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,8 +170,13 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
           _selectedIds.clear();
           _activeBookingId = null;
         });
+        final allocating = await _allocationOn();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${toUpdate.length} booking(s) confirmed.')),
+          SnackBar(
+            content: Text('${toUpdate.length} booking(s) confirmed.${allocating.auto ? ' Artists were assigned automatically where the route fits — the rest wait on the Allocation Board.' : allocating.on ? ' Give them their artists on the Allocation Board.' : ''}'),
+            action: allocating.on ? SnackBarAction(label: 'Open board', onPressed: () => context.go('/booking/allocation')) : null,
+          ),
         );
       }
     } catch (error) {
@@ -118,6 +193,37 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncBookings = ref.watch(bookingProvider);
+    // The CRM team sees who owns each request (and the head hands them out). Other roles see the screen as before.
+    final crmOn = Access.of(ref.watch(authSessionProvider)).canSeeCrmWork;
+    final owners = crmOn ? ref.watch(crmBookingOwnersProvider).value : null;
+    final crmMe = crmOn ? ref.watch(crmMeProvider).value : null;
+    bool keepForOwner(Booking b) {
+      if (owners == null || _ownerFilter == 'all') return true;
+      final o = owners[b.id];
+      if (_ownerFilter == 'unassigned') return o != null && !o.isAssigned;
+      return o != null && o.ownerId == crmMe?.userId;
+    }
+
+    Widget? ownerTag(Booking b) {
+      if (owners == null) return null;
+      final o = owners[b.id];
+      if (o == null) return (crmMe?.seesTeam ?? true) ? null : const CrmOwnerChip(name: 'Another member');
+      if (o.isAssigned) return CrmOwnerChip(key: Key('crmOwner_${b.id}'), name: o.ownerName);
+      return Wrap(
+        spacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          CrmOwnerChip(key: Key('crmOwner_${b.id}'), name: '', assigned: false),
+          if (crmMe != null && crmMe.canWrite && !crmMe.canAssign)
+            TextButton(
+              key: Key('crmTakeBooking_${b.id}'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: () => crmAssign(context, ref, [o], crmMe.userId),
+              child: const Text('Take it'),
+            ),
+        ],
+      );
+    }
 
     return SelectionArea(
       child: asyncBookings.when(
@@ -130,6 +236,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
         final pendingBookings =
             bookings
                 .where((booking) => booking.status.toLowerCase() == 'pending')
+                .where(keepForOwner)
                 .toList()
               ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
         final pendingEntries = pendingBookings
@@ -241,6 +348,38 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                 ],
               ),
             isMobile ? 16.h : 24.h,
+            if (owners != null) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final (k, l) in const [('all', 'All requests'), ('mine', 'Mine'), ('unassigned', 'Not assigned')])
+                    ChoiceChip(
+                      key: Key('crmRequestsFilter_$k'),
+                      label: Text(l),
+                      selected: _ownerFilter == k,
+                      onSelected: (_) => setState(() {
+                        _ownerFilter = k;
+                        _selectedIds.clear();
+                      }),
+                    ),
+                  if ((crmMe?.canAssign ?? false) && _selectedIds.isNotEmpty)
+                    FilledButton.tonalIcon(
+                      key: const Key('crmAssignRequests'),
+                      icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+                      label: Text('Assign to… (${_selectedIds.length})'),
+                      onPressed: () async {
+                        final owner = await showCrmAssignDialog(context, count: _selectedIds.length);
+                        if (owner == null || !context.mounted) return;
+                        final ok = await crmAssign(context, ref, [for (final id in _selectedIds) CrmQueueItem(type: 'booking', id: id)], owner);
+                        if (ok && mounted) setState(_selectedIds.clear);
+                      },
+                    ),
+                ],
+              ),
+              14.h,
+            ],
             if (isMobile && pendingEntries.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -322,6 +461,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                     final booking = pendingEntries[index];
                     return _MobileBookingRequestCard(
                       booking: booking,
+                      ownerTag: ownerTag(booking.booking),
                       selected: _selectedIds.contains(booking.booking.id),
                       onSelected: (selected) {
                         setState(() {
@@ -427,6 +567,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                                 color: crmColors.textSecondary,
                                               ),
                                             ),
+                                            if (ownerTag(booking.booking) case final tag?) ...[6.h, tag],
                                           ],
                                         ),
                                       ),
@@ -466,10 +607,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                 final scaffoldMessenger = ScaffoldMessenger.of(
                                   context,
                                 );
-                                await _updateStatus(
-                                  activeBooking.booking,
-                                  'confirmed',
-                                );
+                                if (!await confirmBookingRequest(context, ref, activeBooking.booking)) return;
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
                                     const SnackBar(
@@ -652,6 +790,9 @@ class _MobileBookingRequestCard extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
+  /// Who on the CRM team owns the request (CRM logins only).
+  final Widget? ownerTag;
+
   static const _pending = Color(0xFFB45309);
   static const _accept = Color(0xFF15803D);
   static const _reject = Color(0xFFB91C1C);
@@ -663,6 +804,7 @@ class _MobileBookingRequestCard extends StatelessWidget {
     required this.onReview,
     required this.onAccept,
     required this.onReject,
+    this.ownerTag,
   });
 
   @override
@@ -752,6 +894,7 @@ class _MobileBookingRequestCard extends StatelessWidget {
                             style: TextStyle(
                                 color: crmColors.textSecondary, fontSize: 12.5),
                           ),
+                          if (ownerTag != null) ...[6.h, ownerTag!],
                         ],
                       ),
                     ),
@@ -853,9 +996,16 @@ class _BookingApprovalDialogState
   Future<void> _changeStatus(String status) async {
     setState(() => _saving = true);
     try {
-      await ref
-          .read(bookingProvider.notifier)
-          .updateBooking(widget.booking.booking.copyWith(status: status));
+      if (status == 'confirmed') {
+        if (!await confirmBookingRequest(context, ref, widget.booking.booking)) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+      } else {
+        await ref
+            .read(bookingProvider.notifier)
+            .updateBooking(widget.booking.booking.copyWith(status: status));
+      }
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart' show Mkt;
 
 // The small pieces every Team Dashboard tab is built from, so they read as one family.
 
@@ -37,7 +38,7 @@ IconData kindIcon(ActivityKind k) => switch (k) {
     };
 
 /// A donut / legend palette by position, so a chart and its legend agree.
-const _palette = <Color>[Color(0xFF7C5CE8), Color(0xFF3B82F6), Color(0xFF22A06B), Color(0xFFF5A524), Color(0xFFE05D9A), Color(0xFF14B8A6), Color(0xFF9AA0A6)];
+const _palette = <Color>[Mkt.primaryLight, Color(0xFF3B82F6), Color(0xFF22A06B), Color(0xFFF5A524), Color(0xFFE05D9A), Color(0xFF14B8A6), Color(0xFF9AA0A6)];
 Color teamColor(int i) => _palette[i % _palette.length];
 
 String shortDay(String day) {

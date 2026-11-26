@@ -11,9 +11,10 @@ import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
+import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
 /// Creative Portfolio → Shoot Reports: planned outputs (from the Shoot Planner) against delivered ones (assets attached to the shoot
-/// that are Approved or Final), turnaround, footage, and a report for each shoot.
+/// that are Approved or Final, and posts from it that went out — each once), turnaround, footage, and a report for each shoot.
 class ShootReportsTab extends ConsumerWidget {
   const ShootReportsTab({super.key});
 
@@ -41,7 +42,7 @@ class ShootReportsTab extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
               MktKpiRow(minWidth: 180, children: [
-                kpi('sr_kpi_shoots', Icons.photo_camera_outlined, 'Total Shoots', '${k.shoots}', 'shoots', Mkt.violet),
+                kpi('sr_kpi_shoots', Icons.photo_camera_outlined, 'Total Shoots', '${k.shoots}', 'shoots', Mkt.primary),
                 kpi('sr_kpi_completed', Icons.check_circle_outline_rounded, 'Completed', '${k.completed}', 'completed', Mkt.good),
                 kpi('sr_kpi_outputs', Icons.play_circle_outline_rounded, 'Total Outputs', '${k.outputs}', 'outputs', Mkt.warn),
                 kpi('sr_kpi_footage', Icons.storage_rounded, 'Footage Captured', k.footageGb == null ? '—' : '${k.footageGb} GB', 'footageGb', Mkt.blue),
@@ -97,11 +98,11 @@ class _Completion extends StatelessWidget {
                     leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, m) => v == m.max ? const SizedBox.shrink() : Text('${v.toInt()}', style: mktText(9.5, color: Mkt.inkSoft)))),
                     bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, getTitlesWidget: (v, _) => Padding(padding: const EdgeInsets.only(top: 6), child: Text(DateFormat('MMM').format(DateTime.parse('${r.monthly[v.toInt()].month}-01')), style: mktText(10, color: Mkt.inkSoft))))),
                   ),
-                  barGroups: [for (var i = 0; i < r.monthly.length; i++) BarChartGroupData(x: i, barsSpace: 3, barRods: [BarChartRodData(toY: r.monthly[i].planned.toDouble(), color: Mkt.tint(Mkt.violet, 0.35), width: 11, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))), BarChartRodData(toY: r.monthly[i].delivered.toDouble(), color: Mkt.violet, width: 11, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))])],
+                  barGroups: [for (var i = 0; i < r.monthly.length; i++) BarChartGroupData(x: i, barsSpace: 3, barRods: [BarChartRodData(toY: r.monthly[i].planned.toDouble(), color: Mkt.tint(Mkt.primary, 0.35), width: 11, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))), BarChartRodData(toY: r.monthly[i].delivered.toDouble(), color: Mkt.primary, width: 11, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))])],
                 )),
               ),
               const SizedBox(height: 6),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [for (final l in [('Planned', Mkt.tint(Mkt.violet, 0.35)), ('Delivered', Mkt.violet)]) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Row(children: [Container(width: 9, height: 9, decoration: BoxDecoration(color: l.$2, borderRadius: BorderRadius.circular(2))), const SizedBox(width: 5), Text(l.$1, style: mktText(11, color: Mkt.inkSoft))]))]),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [for (final l in [('Planned', Mkt.tint(Mkt.primary, 0.35)), ('Delivered', Mkt.primary)]) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Row(children: [Container(width: 9, height: 9, decoration: BoxDecoration(color: l.$2, borderRadius: BorderRadius.circular(2))), const SizedBox(width: 5), Text(l.$1, style: mktText(11, color: Mkt.inkSoft))]))]),
             ]),
     );
   }
@@ -153,12 +154,33 @@ class _Efficiency extends StatelessWidget {
                   leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 26, getTitlesWidget: (v, m) => v == m.max ? const SizedBox.shrink() : Text(v.toStringAsFixed(0), style: mktText(9.5, color: Mkt.inkSoft)))),
                   bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 22, interval: 1, getTitlesWidget: (v, _) => v == v.roundToDouble() && v.toInt() < r.monthly.length ? Padding(padding: const EdgeInsets.only(top: 6), child: Text(DateFormat('MMM').format(DateTime.parse('${r.monthly[v.toInt()].month}-01')), style: mktText(10, color: Mkt.inkSoft))) : const SizedBox.shrink())),
                 ),
-                lineBarsData: [LineChartBarData(spots: pts, isCurved: true, color: Mkt.violet2, barWidth: 2.5, dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: true, color: Mkt.violet2.withValues(alpha: 0.12)))],
+                lineBarsData: [LineChartBarData(spots: pts, isCurved: true, color: Mkt.primaryLight, barWidth: 2.5, dotData: const FlDotData(show: true), belowBarData: BarAreaData(show: true, color: Mkt.primaryLight.withValues(alpha: 0.12)))],
               )),
             ),
     );
   }
 }
+
+/// The Shoot Reports CSV: one row per shoot (every row that matches — not one page), with planned and delivered outputs by type.
+/// A turnaround that cannot be known yet is left empty, never 0.
+List<List<Object?>> shootReportsCsvRows(List<ShootSummary> rows) => [
+      ['Shoot', 'Category', 'Brand', 'Date', 'Status', 'Delayed', 'Planned outputs', 'Delivered outputs', for (final o in kOutputKeys) ...['${o.$2} planned', '${o.$2} delivered'], 'Delivered as posts', 'Turnaround (days)', 'Progress %'],
+      for (final s in rows)
+        [
+          s.title,
+          s.category,
+          s.brand == 'kerala' ? 'Kerala' : 'Main',
+          s.shootDate,
+          shootStatusLabel(s.status),
+          s.delayed ? 'Yes' : 'No',
+          s.plannedTotal,
+          s.deliveredTotal,
+          for (final o in kOutputKeys) ...[s.planned[o.$1] ?? 0, s.delivered[o.$1] ?? 0],
+          s.deliveredPosts.values.fold<int>(0, (a, b) => a + b),
+          s.turnaround ?? '',
+          s.progress,
+        ],
+    ];
 
 class _ReportList extends ConsumerStatefulWidget {
   const _ReportList({required this.r, required this.openId});
@@ -179,6 +201,21 @@ class _ReportListState extends ConsumerState<_ReportList> {
   }
 
   void _set(ReportQuery q) => ref.read(reportQueryProvider.notifier).state = q;
+  bool _exporting = false;
+
+  /// Export every row that matches the filters — fetched in full for the file, not the page on screen.
+  Future<void> _export() async {
+    setState(() => _exporting = true);
+    try {
+      final f = ref.read(teamFilterProvider);
+      final all = await ref.read(marketingPortfolioServiceProvider).allReports(f, ref.read(reportQueryProvider));
+      await downloadCsv('shoot-reports-${f.fromDay}-to-${f.toDay}.csv', shootReportsCsvRows(all.rows));
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,7 +228,7 @@ class _ReportListState extends ConsumerState<_ReportList> {
     return MktCard(
       title: 'Recent Shoot Reports',
       icon: Icons.description_outlined,
-      trailing: TextButton.icon(key: const Key('sr_export'), onPressed: () => downloadCsv('shoot-reports.csv', [['Shoot', 'Brand', 'Date', 'Status', 'Planned outputs', 'Delivered outputs', 'Turnaround (days)'], for (final s in r.rows) [s.title, s.brand, s.shootDate, shootStatusLabel(s.status), s.plannedTotal, s.deliveredTotal, s.turnaround ?? '']]), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Export')),
+      trailing: TextButton.icon(key: const Key('sr_export'), onPressed: _exporting ? null : _export, icon: const Icon(Icons.download_rounded, size: 16), label: Text(_exporting ? 'Exporting…' : 'Export')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           count('All', 'all'),
@@ -200,7 +237,7 @@ class _ReportListState extends ConsumerState<_ReportList> {
           count('Delayed', 'delayed'),
           SizedBox(
             width: 220,
-            child: TextField(key: const Key('sr_search'), controller: _search, onChanged: (v) => _set(ReportQuery(filter: q.filter, q: v)), style: mktText(13), decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, size: 18), hintText: 'Search shoot, brand or campaign…', isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 10), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.violet)))),
+            child: TextField(key: const Key('sr_search'), controller: _search, onChanged: (v) => _set(ReportQuery(filter: q.filter, q: v)), style: mktText(13), decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, size: 18), hintText: 'Search shoot, brand or campaign…', isDense: true, contentPadding: const EdgeInsets.symmetric(vertical: 10), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.primary)))),
           ),
         ]),
         const SizedBox(height: 10),
@@ -235,9 +272,10 @@ class _ReportListState extends ConsumerState<_ReportList> {
   }
 }
 
-enum _RPart { overview, assets, checklist, team }
+enum _RPart { overview, outputs, assets, checklist, notes, team }
 
-/// One shoot's report: its summary and outputs, the assets attached, the milestone checklist, the crew, and the key takeaways.
+/// One shoot's report: its summary, its outputs planned against delivered by type, the assets attached, the milestone checklist, the
+/// brief's notes, the crew, and the key takeaways.
 class ShootReportCard extends ConsumerStatefulWidget {
   const ShootReportCard({super.key, required this.id});
   final String id;
@@ -263,12 +301,14 @@ class _ShootReportCardState extends ConsumerState<ShootReportCard> {
           icon: Icons.description_outlined,
           trailing: MktChip(shootStatusLabel(s.status), color: shootStatusColor(s.status)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final p in _RPart.values) Padding(padding: const EdgeInsets.only(right: 6), child: MktFilterChip(key: Key('sr_part_${p.name}'), label: p.name[0].toUpperCase() + p.name.substring(1), selected: _part == p, onTap: () => setState(() => _part = p)))])),
+            Wrap(spacing: 6, runSpacing: 6, children: [for (final p in _RPart.values) MktFilterChip(key: Key('sr_part_${p.name}'), label: p.name[0].toUpperCase() + p.name.substring(1), selected: _part == p, onTap: () => setState(() => _part = p))]),
             const SizedBox(height: 10),
             switch (_part) {
               _RPart.overview => _overview(d),
+              _RPart.outputs => _outputs(d),
               _RPart.assets => _assets(d),
               _RPart.checklist => _checklist(d),
+              _RPart.notes => _notes(d),
               _RPart.team => _team(d),
             },
           ]),
@@ -294,18 +334,56 @@ class _ShootReportCardState extends ConsumerState<ShootReportCard> {
         Container(
           key: const Key('sr_takeaways'),
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Mkt.tint(Mkt.violet, 0.06), borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(color: Mkt.tint(Mkt.primary, 0.06), borderRadius: BorderRadius.circular(10)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Key Takeaways', style: mktText(12, weight: FontWeight.w800)), const SizedBox(height: 4), for (final t in d.takeaways) Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.check_circle_rounded, size: 14, color: Mkt.good), const SizedBox(width: 6), Expanded(child: Text(t, style: mktText(11.5)))]))]),
         ),
       ],
     ]);
   }
 
+  /// Planned against delivered for each type of output, with how many came as posts and what is left.
+  Widget _outputs(ShootDetail d) {
+    final s = d.summary;
+    final rows = [for (final o in kOutputKeys) if ((s.planned[o.$1] ?? 0) > 0 || (s.delivered[o.$1] ?? 0) > 0) (key: o.$1, label: o.$2, planned: s.planned[o.$1] ?? 0, delivered: s.delivered[o.$1] ?? 0, posts: s.deliveredPosts[o.$1] ?? 0)];
+    if (rows.isEmpty) return const MktEmpty('No outputs were planned and nothing is delivered yet.', icon: Icons.checklist_rounded, height: 100);
+    return Column(key: const Key('sr_outputs'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      MktTable(
+        minWidth: 360,
+        rowHeight: 38,
+        rowKeys: [for (final r in rows) Key('sr_output_${r.key}')],
+        columns: const [MktCol('Output', flex: 3), MktCol('Planned', width: 60, align: Alignment.center), MktCol('Delivered', width: 66, align: Alignment.center), MktCol('As posts', width: 62, align: Alignment.center), MktCol('Left', width: 46, align: Alignment.centerRight)],
+        rows: [
+          for (final r in rows)
+            [
+              Text(r.label, style: mktText(12, weight: FontWeight.w700)),
+              Text(r.planned == 0 ? '—' : '${r.planned}', style: mktText(12)),
+              Text('${r.delivered}', style: mktText(12, weight: FontWeight.w800, color: r.planned > 0 && r.delivered >= r.planned ? Mkt.good : Mkt.ink)),
+              Text('${r.posts}', style: mktText(12, color: Mkt.inkSoft)),
+              Text(r.planned == 0 ? '—' : '${(r.planned - r.delivered).clamp(0, 1 << 30)}', style: mktText(12, weight: FontWeight.w700)),
+            ],
+        ],
+      ),
+      const SizedBox(height: 6),
+      Text('Delivered = approved or final assets of the shoot, and posts from it that went out — each counted once.', style: mktText(11, color: Mkt.inkSoft)),
+    ]);
+  }
+
+  /// The brief's notes (what the planner wrote for the team).
+  Widget _notes(ShootDetail d) => d.notes.trim().isEmpty
+      ? const MktEmpty('No notes were written for this shoot. Add them in Edit plan.', icon: Icons.sticky_note_2_outlined, height: 100)
+      : Container(
+          key: const Key('sr_notes'),
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Mkt.bg, borderRadius: BorderRadius.circular(12)),
+          child: SelectableText(d.notes, style: mktText(12.5, height: 1.4)),
+        );
+
   Widget _assets(ShootDetail d) => d.assets.isEmpty
       ? const MktEmpty('No assets are attached to this shoot yet.', icon: Icons.photo_library_outlined, height: 100)
       : Column(key: const Key('sr_assets'), children: [
           for (final a in d.assets.take(12))
-            ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(a.media == 'video' ? Icons.play_circle_outline_rounded : Icons.image_outlined, color: Mkt.violet), title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w600)), subtitle: Text(assetKindLabel(a.kind), style: mktText(10.5, color: Mkt.inkSoft)), trailing: MktChip(assetStageLabel(a.stage), color: a.stage == 'approved' ? Mkt.good : Mkt.grey), onTap: () => launchUrl(Uri.parse(a.url), mode: LaunchMode.externalApplication)),
+            ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(a.media == 'video' ? Icons.play_circle_outline_rounded : Icons.image_outlined, color: Mkt.primary), title: Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w600)), subtitle: Text(assetKindLabel(a.kind), style: mktText(10.5, color: Mkt.inkSoft)), trailing: MktChip(assetStageLabel(a.stage), color: a.stage == 'approved' ? Mkt.good : Mkt.grey), onTap: () => launchUrl(Uri.parse(a.url), mode: LaunchMode.externalApplication)),
         ]);
 
   Widget _checklist(ShootDetail d) => Column(key: const Key('sr_checklist'), children: [
@@ -315,5 +393,5 @@ class _ShootReportCardState extends ConsumerState<ShootReportCard> {
 
   Widget _team(ShootDetail d) => d.crew.isEmpty
       ? const MktEmpty('No crew was assigned.', icon: Icons.groups_2_outlined, height: 90)
-      : Column(key: const Key('sr_team'), children: [for (final c in d.crew) Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [MktAvatar(c.name, size: 26), const SizedBox(width: 8), Expanded(child: Text(c.name, style: mktText(12.5, weight: FontWeight.w700))), if (c.role.isNotEmpty) MktChip(c.role, color: Mkt.violet)]))]);
+      : Column(key: const Key('sr_team'), children: [for (final c in d.crew) Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [MktAvatar(c.name, size: 26), const SizedBox(width: 8), Expanded(child: Text(c.name, style: mktText(12.5, weight: FontWeight.w700))), if (c.role.isNotEmpty) MktChip(c.role, color: Mkt.primary)]))]);
 }

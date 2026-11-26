@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nizan_crm/features/it/domain/horizon_for_dates.dart';
 import 'package:nizan_crm/core/models/auth_session.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -332,6 +333,11 @@ void main() {
       final fake = await _open(tester, projects ?? _mix());
       await tester.tap(find.widgetWithText(FilledButton, 'Propose Project').first);
       await tester.pumpAndSettle();
+      // a new project starts with no owning department: these looks are about a Marketing project
+      await tester.tap(find.byKey(const Key('form_owner_dept')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Marketing').last);
+      await tester.pumpAndSettle();
       return fake;
     }
 
@@ -413,6 +419,95 @@ void main() {
       expect(body.containsKey('endDate'), isTrue);
       expect(body['horizonNumber'], 1);
       expect(body.containsKey('strategicPillar'), isTrue);
+    });
+
+    testWidgets('the dates set the strategic wave and the target year (the year it ends); "set from the end date" says so', (tester) async {
+      final fake = await openForm(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Project name *'), 'Dubai studio');
+      await tester.enterText(find.byKey(const Key('cost_total')), '25000');
+      await tester.ensureVisible(find.byKey(const Key('preset_1 year')));
+      await tester.tap(find.byKey(const Key('preset_1 year')));
+      await tester.pumpAndSettle();
+      final endYear = DateTime(_now.year, _now.month + 12, _now.day).year;
+      expect(tester.widget<Text>(find.byKey(const Key('wave_auto_note'))).data, 'Set from the end date ($endYear) — change it if needed.');
+      expect(find.widgetWithText(TextField, '$endYear'), findsOneWidget, reason: 'the target completion year is the end date\'s year');
+      await tester.ensureVisible(find.text('Send proposal'));
+      await tester.tap(find.text('Send proposal'));
+      await tester.pumpAndSettle();
+      final body = fake.saved.single;
+      expect([body['horizonNumber'], body['targetYear']], [horizonForYear(endYear, const []), endYear]);
+    });
+
+    testWidgets('a wave picked by hand stays when the dates change; a target year typed by hand stays too', (tester) async {
+      final fake = await openForm(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Project name *'), 'Dubai studio');
+      await tester.enterText(find.byKey(const Key('cost_total')), '25000');
+      await tester.ensureVisible(find.byKey(const Key('preset_6 months')));
+      await tester.tap(find.byKey(const Key('preset_6 months')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Strategic Horizon Wave'));
+      await tester.tap(find.text('Strategic Horizon Wave'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Horizon 3: Transformation Wave').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('wave_auto_note')), findsNothing);
+      await tester.enterText(find.widgetWithText(TextField, 'Target Completion Year (e.g. 2028)'), '2035');
+      await tester.ensureVisible(find.byKey(const Key('preset_1 year')));
+      await tester.tap(find.byKey(const Key('preset_1 year')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Send proposal'));
+      await tester.tap(find.text('Send proposal'));
+      await tester.pumpAndSettle();
+      final body = fake.saved.single;
+      expect([body['horizonNumber'], body['targetYear']], [3, 2035]);
+    });
+
+    // ── the phases follow the owning department: IT software steps, Marketing campaign steps, the rest business steps ──
+    String phaseShown(WidgetTester tester) =>
+        tester.widgetList<Text>(find.descendant(of: find.byKey(const ValueKey('phase_Finance')).hitTestable(), matching: find.byType(Text))).map((t) => t.data ?? '').join('|');
+
+    testWidgets('the phases are the owning department\'s: Marketing has campaign steps, Finance business steps; saving sends the one picked', (tester) async {
+      final fake = await openForm(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Project name *'), 'Ledger clean-up');
+      await tester.enterText(find.byKey(const Key('cost_total')), '25000');
+      await tester.ensureVisible(find.byKey(const Key('preset_2 weeks')));
+      await tester.tap(find.byKey(const Key('preset_2 weeks')));
+      await tester.pumpAndSettle();
+      expect(find.text('Steps for Marketing: Research → Planning → Production → Launch → Review'), findsOneWidget);
+      expect(find.text('Discovery'), findsNothing, reason: 'the software steps are for IT');
+      // the owning department → Finance: its phases change, and the phase moves to the first business step
+      final owner = find.ancestor(of: find.text('Owning department *'), matching: find.byType(DropdownButtonFormField<String>));
+      await tester.ensureVisible(owner);
+      await tester.tap(owner);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Finance').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Steps for Finance: Initiation → Planning → Execution → Review → Closure'), findsOneWidget);
+      expect(phaseShown(tester), contains('Initiation'));
+      await tester.ensureVisible(find.byKey(const ValueKey('phase_Finance')));
+      await tester.tap(find.byKey(const ValueKey('phase_Finance')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('do the work'), findsOneWidget, reason: 'each step says what it means');
+      await tester.tap(find.textContaining('Execution').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Send proposal'));
+      await tester.tap(find.text('Send proposal'));
+      await tester.pumpAndSettle();
+      final body = fake.saved.single;
+      expect([body['targetDepartment'], body['phase']], ['Finance', 'execution']);
+    });
+
+    testWidgets('a project saved with a software phase opens at the equivalent step of its department', (tester) async {
+      final fake = await _open(tester, [_p('a', 'Diwali reel shoot', start: _in(-2), end: _in(12), extra: const {'phase': 'development'})]);
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Steps for Marketing: Research → Planning → Production → Launch → Review'), findsOneWidget);
+      await tester.ensureVisible(find.text('Save changes'));
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(fake.saved.single['phase'], 'production', reason: 'Development on a Marketing project = Production');
     });
 
     // ── the estimated cost: asked for when a project is added, approved by the finance head before it starts ──

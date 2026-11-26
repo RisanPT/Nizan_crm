@@ -77,6 +77,10 @@ Future<void> downloadLeadsReport({
   String sourceFilter = 'All',
   String searchQuery = '',
   List<CrmUser> users = const [],
+
+  /// The dates [leads] were cut to, in words (said in the header) and as a file-name tag; null = not cut by date.
+  String? periodLabel,
+  String? fileTag,
 }) {
   return impl.downloadLeadsReport(
     leads: leads,
@@ -84,5 +88,7 @@ Future<void> downloadLeadsReport({
     sourceFilter: sourceFilter,
     searchQuery: searchQuery,
     users: users,
+    periodLabel: periodLabel,
+    fileTag: fileTag,
   );
 }

@@ -317,15 +317,14 @@ class BookingNotifier extends _$BookingNotifier {
       for (final existing in state.value ?? const <Booking>[])
         fresh[existing.id] ?? existing,
     ]);
-    for (final id in fresh.keys) {
-      ref.invalidate(singleBookingProvider(id));
-    }
   }
 
   Future<Booking> updateBooking(
     Booking booking, {
     bool confirmFleetConflict = false,
     bool confirmDriverDay = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
   }) async {
     final service = ref.read(bookingServiceProvider);
     final previousState = state;
@@ -348,6 +347,8 @@ class BookingNotifier extends _$BookingNotifier {
         booking,
         confirmFleetConflict: confirmFleetConflict,
         confirmDriverDay: confirmDriverDay,
+        confirmArtistConflict: confirmArtistConflict,
+        extraBody: extraBody,
       );
       final merged = booking.copyWith(reviewUrl: serverBooking.reviewUrl);
       if (ref.mounted) {

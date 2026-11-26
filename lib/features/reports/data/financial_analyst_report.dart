@@ -56,6 +56,22 @@ class CancellationRow {
 
 class FinancialAnalystReport {
   final String month;
+
+  /// The days the report covers, said in words ("1 Nov – 17 Nov 2026"), and whether they were chosen freely (not a whole month).
+  /// Empty / false from a server that only knows months.
+  final String periodLabel;
+  final bool customPeriod;
+  final String periodFrom;
+  final String periodTo;
+
+  /// What the report is about, for its title: the dates for a chosen stretch, the month otherwise.
+  String get periodText => customPeriod && periodLabel.isNotEmpty ? periodLabel : month;
+
+  /// The report's name: it is "Monthly" only when it is one.
+  String get reportTitle => customPeriod ? 'Financial-Analyst Report' : 'Monthly Financial-Analyst Report';
+
+  /// For a file name.
+  String get fileTag => customPeriod && periodFrom.isNotEmpty ? '${periodFrom}_to_$periodTo' : month;
   // Sales
   final List<PackageRow> packageBreakdown;
   final int totalBookings;
@@ -83,6 +99,10 @@ class FinancialAnalystReport {
 
   const FinancialAnalystReport({
     required this.month,
+    this.periodLabel = '',
+    this.customPeriod = false,
+    this.periodFrom = '',
+    this.periodTo = '',
     required this.packageBreakdown,
     required this.totalBookings,
     required this.totalRevenue,
@@ -115,8 +135,13 @@ class FinancialAnalystReport {
     final aging = (fin['receivablesAging'] as Map<String, dynamic>?) ?? const {};
     final ls = (sales['leadSource'] as Map<String, dynamic>?) ?? const {};
 
+    final period = (j['period'] as Map<String, dynamic>?) ?? const {};
     return FinancialAnalystReport(
       month: j['month'] as String? ?? '',
+      periodLabel: period['label'] as String? ?? '',
+      customPeriod: period['custom'] == true,
+      periodFrom: period['from'] as String? ?? '',
+      periodTo: period['to'] as String? ?? '',
       packageBreakdown: ((sales['packageBreakdown'] as List?) ?? const [])
           .map((e) => PackageRow.fromJson(e as Map<String, dynamic>))
           .toList(),

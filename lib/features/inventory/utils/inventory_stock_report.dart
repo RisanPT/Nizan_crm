@@ -258,7 +258,7 @@ Future<Uint8List> buildInventoryStockReportPdf(
                       style: const pw.TextStyle(fontSize: 10.5, color: PdfColors.grey700)),
                 ]),
               ),
-              pw.Text('Team N ERP',
+              pw.Text('Team N Makeovers',
                   style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: kPdfBrand)),
             ]),
             pw.SizedBox(height: 8),
@@ -277,7 +277,7 @@ Future<Uint8List> buildInventoryStockReportPdf(
       ),
       child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
         pw.Text(
-            pdfSafe('Team N ERP - generated ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}'),
+            pdfSafe('Team N Makeovers - generated ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}'),
             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
         pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),

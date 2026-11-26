@@ -5,14 +5,16 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/marketing/data/portfolio_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/link_pickers.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
-/// Plan a shoot (on [day]) or change [shoot]: the brand, content pillar, date, crew and what it should produce — typed once. The planned
-/// outputs are what Shoot Reports compare the delivered assets against.
-Future<void> showShootEditor(BuildContext context, WidgetRef ref, {ShootDetail? shoot, DateTime? day}) {
-  final form = _ShootForm(shoot: shoot, day: day);
+/// Plan a shoot (on [day]) or change [shoot]: the brand, content pillar, date, crew (the team and makeup artists), the work (CRM booking)
+/// it covers and what it should produce — typed once. The planned outputs are what Shoot Reports compare the delivered assets against.
+/// [booking] opens a new plan for that work: the work is linked and its day and client fill the plan.
+Future<void> showShootEditor(BuildContext context, WidgetRef ref, {ShootDetail? shoot, DateTime? day, BookingBrief? booking}) {
+  final form = _ShootForm(shoot: shoot, day: day, booking: booking);
   if (MediaQuery.sizeOf(context).width >= 760) {
     return showDialog<void>(context: context, builder: (_) => Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 640), child: form)));
   }
@@ -20,16 +22,17 @@ Future<void> showShootEditor(BuildContext context, WidgetRef ref, {ShootDetail? 
 }
 
 class _ShootForm extends ConsumerStatefulWidget {
-  const _ShootForm({this.shoot, this.day});
+  const _ShootForm({this.shoot, this.day, this.booking});
   final ShootDetail? shoot;
   final DateTime? day;
+  final BookingBrief? booking;
 
   @override
   ConsumerState<_ShootForm> createState() => _ShootFormState();
 }
 
 class _ShootFormState extends ConsumerState<_ShootForm> {
-  late final _title = TextEditingController(text: widget.shoot?.summary.title ?? '');
+  late final _title = TextEditingController(text: widget.shoot?.summary.title ?? (widget.booking == null ? '' : [widget.booking!.customerName, widget.booking!.service].where((x) => x.isNotEmpty).join(' – ')));
   late final _category = TextEditingController(text: widget.shoot?.summary.category ?? '');
   late final _pillar = TextEditingController(text: widget.shoot?.pillar ?? '');
   late final _location = TextEditingController(text: widget.shoot?.summary.location ?? '');
@@ -37,13 +40,17 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
   late final _objective = TextEditingController(text: widget.shoot?.objective ?? '');
   late final _audience = TextEditingController(text: widget.shoot?.audience ?? '');
   late final _notes = TextEditingController(text: widget.shoot?.notes ?? '');
-  late final _refs = TextEditingController(text: (widget.shoot?.references ?? const []).map((r) => r.url).join('\n'));
-  late final _otherCrew = TextEditingController(text: (widget.shoot?.crew ?? const []).where((c) => c.memberId == null).map((c) => c.role.isEmpty ? c.name : '${c.name} – ${c.role}').join(', '));
+  late final _otherCrew = TextEditingController(text: (widget.shoot?.crew ?? const []).where((c) => c.memberId == null && c.employeeId == null).map((c) => c.role.isEmpty ? c.name : '${c.name} – ${c.role}').join(', '));
   late final Map<String, TextEditingController> _planned = {for (final o in kOutputKeys) o.$1: TextEditingController(text: (widget.shoot?.summary.planned[o.$1] ?? 0) == 0 ? '' : '${widget.shoot!.summary.planned[o.$1]}')};
   late String _brand = widget.shoot?.summary.brand ?? 'main';
   late String _type = widget.shoot?.summary.shootType.isNotEmpty == true ? widget.shoot!.summary.shootType : 'Full Shoot';
   late String _status = widget.shoot?.summary.status ?? 'planned';
-  late DateTime _date = DateTime.tryParse(widget.shoot?.summary.shootDate ?? '') ?? widget.day ?? DateTime.now();
+  late DateTime _date = DateTime.tryParse(widget.shoot?.summary.shootDate ?? '') ?? widget.day ?? DateTime.tryParse(widget.booking?.eventDate ?? '') ?? DateTime.now();
+  // the work the shoot covers; a saved shoot's link may only be known by its id
+  late BookingBrief? _booking = widget.shoot?.booking ?? widget.booking;
+  late String? _bookingId = widget.shoot?.summary.bookingId ?? widget.booking?.id;
+  // the makeup artists on the crew, with the name and role saved on the plan
+  late final Map<String, CrewMember> _artists = {for (final c in widget.shoot?.crew ?? const <CrewMember>[]) if (c.employeeId != null && c.memberId == null) c.employeeId!: c};
   TimeOfDay? _start, _end;
   late final Set<String> _crew = {for (final c in widget.shoot?.crew ?? const <CrewMember>[]) if (c.memberId != null) c.memberId!};
   bool _saving = false;
@@ -59,7 +66,7 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
 
   @override
   void dispose() {
-    for (final c in [_title, _category, _pillar, _location, _cover, _objective, _audience, _notes, _refs, _otherCrew, ..._planned.values]) {
+    for (final c in [_title, _category, _pillar, _location, _cover, _objective, _audience, _notes, _otherCrew, ..._planned.values]) {
       c.dispose();
     }
     super.dispose();
@@ -76,6 +83,15 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
     if (t != null) setState(() => start ? _start = t : _end = t);
   }
 
+  Future<void> _pickBooking() async {
+    final r = await pickBooking(context, selectedId: _bookingId, around: TeamFilter.day(_date));
+    if (r == null || !mounted) return;
+    setState(() {
+      _booking = r.value;
+      _bookingId = r.value?.id;
+    });
+  }
+
   Future<void> _save(ShootSetup setup) async {
     if (_title.text.trim().length < 2) {
       setState(() => _error = 'Give the shoot a title.');
@@ -87,6 +103,10 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
     });
     final crew = <CrewMember>[
       for (final m in setup.members) if (_crew.contains(m.id)) CrewMember(memberId: m.id, name: m.name, role: m.role),
+      // a team member on the plan who is not in the list just now (it has not loaded, or they are no longer active) stays on it as saved
+      for (final c in widget.shoot?.crew ?? const <CrewMember>[])
+        if (c.memberId != null && _crew.contains(c.memberId) && !setup.members.any((m) => m.id == c.memberId)) CrewMember(memberId: c.memberId, name: c.name, role: c.role),
+      for (final a in _artists.values) CrewMember(employeeId: a.employeeId, name: a.name, role: a.role),
       for (final part in _otherCrew.text.split(',').map((x) => x.trim()).where((x) => x.isNotEmpty))
         CrewMember(name: part.split(RegExp(r'\s[–-]\s')).first.trim(), role: part.contains(RegExp(r'\s[–-]\s')) ? part.split(RegExp(r'\s[–-]\s')).last.trim() : ''),
     ];
@@ -104,7 +124,7 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
       'brief': {'objective': _objective.text.trim(), 'audience': _audience.text.trim(), 'notes': _notes.text.trim()},
       'planned': {for (final e in _planned.entries) e.key: int.tryParse(e.value.text.trim()) ?? (e.value.text.trim().isEmpty ? 0 : -1)},
       'crew': [for (final c in crew) c.toJson()],
-      'references': [for (final u in _refs.text.split('\n').map((x) => x.trim()).where((x) => x.isNotEmpty)) {'url': u}],
+      'bookingId': _bookingId,
       if (widget.shoot != null) 'status': _status,
     };
     try {
@@ -157,6 +177,19 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
             ]),
             const SizedBox(height: 10),
             TextField(key: const Key('shoot_location'), controller: _location, decoration: _dec('Location', hint: 'Studio 1, Kozhikode')),
+            const SizedBox(height: 10),
+            LinkField(
+              key: const Key('shoot_booking'),
+              label: 'Work (booking) this shoot covers',
+              icon: Icons.event_note_outlined,
+              hint: 'None — a brand shoot',
+              value: _bookingId == null ? null : (_booking == null ? 'A linked booking' : '${_booking!.label}${_booking!.eventDate == null ? '' : ' · ${shootDay(_booking!.eventDate!, pattern: 'd MMM')}'}'),
+              onTap: _pickBooking,
+              onClear: () => setState(() {
+                _booking = null;
+                _bookingId = null;
+              }),
+            ),
             if (editing) ...[
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(key: const Key('shoot_status'), isExpanded: true, initialValue: _status, decoration: _dec('Status'), items: [for (final s in kShootStatuses) DropdownMenuItem(value: s.$1, child: Text(s.$2))], onChanged: (v) => setState(() => _status = v ?? _status)),
@@ -165,6 +198,25 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
             Text('Crew', style: mktText(13, weight: FontWeight.w800)),
             const SizedBox(height: 6),
             if (setup.members.isEmpty) Text('The team list loads here.', style: mktText(11.5, color: Mkt.inkSoft)) else Wrap(spacing: 6, runSpacing: 6, children: [for (final m in setup.members) MktFilterChip(key: Key('shoot_crew_${m.id}'), label: m.role.isEmpty ? m.name : '${m.name} · ${m.role}', selected: _crew.contains(m.id), onTap: () => setState(() => _crew.contains(m.id) ? _crew.remove(m.id) : _crew.add(m.id)))]),
+            const SizedBox(height: 10),
+            Text('Makeup artists', style: mktText(12, weight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              for (final a in _artists.values) InputChip(key: Key('shoot_artist_${a.employeeId}'), label: Text(a.role.isEmpty ? a.name : '${a.name} · ${a.role}', style: mktText(11.5)), onDeleted: () => setState(() => _artists.remove(a.employeeId)), visualDensity: VisualDensity.compact),
+              if (setup.artists.any((a) => !_artists.containsKey(a.id)))
+                PopupMenuButton<String>(
+                  key: const Key('shoot_artist_add'),
+                  tooltip: 'Add a makeup artist',
+                  onSelected: (id) {
+                    final a = setup.artists.firstWhere((x) => x.id == id);
+                    setState(() => _artists[id] = CrewMember(employeeId: a.id, name: a.name, role: a.role));
+                  },
+                  itemBuilder: (_) => [for (final a in setup.artists) if (!_artists.containsKey(a.id)) PopupMenuItem(value: a.id, child: Text(a.role.isEmpty ? a.name : '${a.name} · ${a.role}'))],
+                  child: Chip(avatar: const Icon(Icons.add_rounded, size: 16, color: Mkt.primary), label: Text('Add a makeup artist', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.primary)), visualDensity: VisualDensity.compact),
+                )
+              else if (_artists.isEmpty)
+                Text('No makeup artists on the staff list.', style: mktText(11.5, color: Mkt.inkSoft)),
+            ]),
             const SizedBox(height: 8),
             TextField(key: const Key('shoot_other_crew'), controller: _otherCrew, decoration: _dec('Others (name – role, comma separated)', hint: 'Makeup artist – Makeup, Model')),
             const SizedBox(height: 14),
@@ -180,8 +232,9 @@ class _ShootFormState extends ConsumerState<_ShootForm> {
             TextField(key: const Key('shoot_notes'), controller: _notes, minLines: 2, maxLines: 4, decoration: _dec('Notes')),
             const SizedBox(height: 10),
             TextField(key: const Key('shoot_cover'), controller: _cover, decoration: _dec('Cover picture link (optional)', hint: 'https://…')),
-            const SizedBox(height: 10),
-            TextField(key: const Key('shoot_refs'), controller: _refs, minLines: 2, maxLines: 4, decoration: _dec('Reference / moodboard links (one per line)', hint: 'https://…')),
+            const SizedBox(height: 6),
+            // the moodboard is built in its own tab (pictures from the phone or computer, and links) — an edit here never touches it
+            Text('Moodboard pictures and links are added in the plan\'s Moodboard tab.', key: const Key('shoot_moodboard_note'), style: mktText(11.5, color: Mkt.inkSoft)),
           ]),
         ),
       ),

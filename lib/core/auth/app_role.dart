@@ -197,7 +197,8 @@ enum AppRole {
       case AppRole.sales:
         return {'sales', 'sales_manager', 'sales_executive'};
       case AppRole.crm:
-        return {'crm', 'crm_manager'};
+        // a CRM member; the CRM Head (crm_manager) is appointed by an administrator or a manager
+        return {'crm'};
       case AppRole.accounts:
         return {'accounts', 'accounts_manager', 'accounts_executive'};
       case AppRole.fleetManager:

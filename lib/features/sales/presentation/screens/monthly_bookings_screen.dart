@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -185,22 +187,48 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                           Text('${visible.length} shown', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                           8.w,
                           OutlinedButton.icon(
-                            onPressed: visible.isEmpty
-                                ? null
-                                : () async {
-                                    try {
-                                      await exportBookingsCsv(
-                                        visible,
-                                        periodLabel: periodLabel,
-                                        secondLookOnly: secondLookOnly.value,
-                                      );
-                                    } catch (e) {
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(friendlyErrorMessage(e))),
-                                      );
-                                    }
-                                  },
+                            key: const Key('monthly_export_csv'),
+                            onPressed: () async {
+                              // which dates: the month (or months) on screen to begin with, or any days
+                              final onScreen = useRange ? ReportRange(from: r.start, to: r.end) : monthRange(m);
+                              final chosen = await showReportRangeDialog(
+                                context,
+                                title: 'Export bookings for which dates?',
+                                subtitle: eventBasis.value ? 'By the event date.' : 'By the booking date.',
+                                initial: onScreen,
+                              );
+                              if (chosen == null || !context.mounted) return;
+                              final sameAsScreen = chosen == onScreen;
+                              // the dates on screen: what is shown. Other days: every booking on those days, with the same
+                              // second-look and search filters.
+                              final rows = sameAsScreen
+                                  ? visible
+                                  : filterByRange(all, basisDate, chosen).where((b) {
+                                      if (secondLookOnly.value && !tookSecondLook(b)) return false;
+                                      return q.isEmpty ||
+                                          b.customerName.toLowerCase().contains(q) ||
+                                          b.phone.toLowerCase().contains(q) ||
+                                          b.service.toLowerCase().contains(q) ||
+                                          b.displayBookingNumber.toLowerCase().contains(q);
+                                    }).toList()
+                                    ..sort((a, b) => basisDate(b).compareTo(basisDate(a)));
+                              if (rows.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No bookings for ${chosen.label}.')));
+                                return;
+                              }
+                              try {
+                                await exportBookingsCsv(
+                                  rows,
+                                  periodLabel: sameAsScreen ? periodLabel : chosen.label,
+                                  secondLookOnly: secondLookOnly.value,
+                                );
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(friendlyErrorMessage(e))),
+                                );
+                              }
+                            },
                             icon: const Icon(Icons.download_rounded, size: 16),
                             label: const Text('Export CSV'),
                           ),

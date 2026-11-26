@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -270,8 +271,10 @@ class _TdsSummaryScreenState extends ConsumerState<TdsSummaryScreen> {
       letterSpacing: 0.4);
 
   Future<void> _exportCsv(BuildContext context, List<AdminExpense> all) async {
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      ['TDS Summary'],
+      ['TDS Summary', 'Period: ${period.label}'],
       ['Date', 'Vendor', 'Section', 'TDS amount'],
       for (final e in all)
         if (e.status == 'approved' && _inRange(e.date))
@@ -284,7 +287,7 @@ class _TdsSummaryScreenState extends ConsumerState<TdsSummaryScreen> {
             ],
     ];
     try {
-      await downloadCsv('tds_summary.csv', rows);
+      await downloadCsv('tds_summary_${period.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('TDS summary exported')));

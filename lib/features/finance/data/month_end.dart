@@ -112,6 +112,12 @@ class MonthEndReview {
 
   // 3. Cash flow
   final double cashReceived, cashPaid, cashNet, bankBalance, cashBalance, totalLiquid;
+
+  /// Where the cash & bank figures came from: 'accounts' (the Bank & Cash Balance screen's accounts) or 'ledger' (none set up yet).
+  final String cashSource;
+
+  /// Accounts with no balance entered by the month's end — left out of a past month's figure.
+  final int cashMissing;
   final List<ForecastMonth> forecast;
 
   // 4. Receivables
@@ -182,6 +188,8 @@ class MonthEndReview {
     required this.bankBalance,
     required this.cashBalance,
     required this.totalLiquid,
+    this.cashSource = 'accounts',
+    this.cashMissing = 0,
     required this.forecast,
     required this.arOutstanding,
     required this.arOverdue,
@@ -274,6 +282,8 @@ class MonthEndReview {
       bankBalance: _d(cash['bankBalance']),
       cashBalance: _d(cash['cashBalance']),
       totalLiquid: _d(cash['totalLiquid']),
+      cashSource: cash['cashSource']?.toString() == 'ledger' ? 'ledger' : 'accounts',
+      cashMissing: (cash['cashMissing'] as num?)?.toInt() ?? 0,
       forecast: list(cash['forecast'], ForecastMonth.fromJson),
       arOutstanding: _d(ar['outstanding']),
       arOverdue: _d(ar['overdue']),

@@ -2,13 +2,11 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/extensions/space_extension.dart';
-import '../../../../core/theme/crm_theme.dart';
-import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/models/service_region.dart';
 import 'package:nizan_crm/services/region_service.dart';
-import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
+import '../kit/mkt_kit.dart';
 import '../widgets/csv_upload.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
@@ -39,165 +37,130 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(competitorsProvider);
     // Preload our geographics regions for the filter + add/edit dropdown.
     final regions = ref.watch(regionsProvider).value ?? const <ServiceRegion>[];
 
-    return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(competitorsProvider)),
-      data: (all) {
-        final monday = _thisMonday;
-        final tracked = all
-            .where((c) =>
-                c.latestSnapshot != null &&
-                _sameWeek(c.latestSnapshot!.weekOf, monday))
-            .length;
-        final scored = all.where((c) => c.score > 0).toList();
-        final avg = scored.isEmpty
-            ? 0
-            : (scored.fold<int>(0, (s, c) => s + c.score) / scored.length)
-                .round();
-        final top = all.isEmpty
-            ? 0
-            : all.map((c) => c.score).fold<int>(0, (a, b) => a > b ? a : b);
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: async.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(competitorsProvider)),
+          data: (all) {
+            final monday = _thisMonday;
+            final tracked = all
+                .where((c) =>
+                    c.latestSnapshot != null &&
+                    _sameWeek(c.latestSnapshot!.weekOf, monday))
+                .length;
+            final scored = all.where((c) => c.score > 0).toList();
+            final avg = scored.isEmpty
+                ? 0
+                : (scored.fold<int>(0, (s, c) => s + c.score) / scored.length)
+                    .round();
+            final top = all.isEmpty
+                ? 0
+                : all.map((c) => c.score).fold<int>(0, (a, b) => a > b ? a : b);
 
-        final filtered = all.where((c) {
-          // Region filter: '' = all, '__none__' = unassigned, else a region id.
-          if (_regionFilter == '__none__') {
-            if (c.regionId.isNotEmpty) return false;
-          } else if (_regionFilter.isNotEmpty && c.regionId != _regionFilter) {
-            return false;
-          }
-          if (_query.isEmpty) return true;
-          final q = _query.toLowerCase();
-          return c.name.toLowerCase().contains(q) ||
-              c.city.toLowerCase().contains(q) ||
-              c.region.toLowerCase().contains(q) ||
-              c.category.toLowerCase().contains(q);
-        }).toList();
+            final filtered = all.where((c) {
+              // Region filter: '' = all, '__none__' = unassigned, else a region id.
+              if (_regionFilter == '__none__') {
+                if (c.regionId.isNotEmpty) return false;
+              } else if (_regionFilter.isNotEmpty && c.regionId != _regionFilter) {
+                return false;
+              }
+              if (_query.isEmpty) return true;
+              final q = _query.toLowerCase();
+              return c.name.toLowerCase().contains(q) ||
+                  c.city.toLowerCase().contains(q) ||
+                  c.region.toLowerCase().contains(q) ||
+                  c.category.toLowerCase().contains(q);
+            }).toList();
 
-        return ListView(
-          padding: EdgeInsets.fromLTRB(
-              isMobile ? 16 : 24, 16, isMobile ? 16 : 24, 28),
-          children: [
-            _header(crm, isMobile),
-            16.h,
-            InvStatGrid(
-              isMobile: isMobile,
-              stats: [
-                InvStat('${all.length}', 'Competitors',
-                    Icons.groups_2_outlined, crm.primary),
-                InvStat('$tracked', 'Tracked this week',
-                    Icons.event_available_outlined, crm.accent),
-                InvStat('$avg', 'Avg score', Icons.speed_outlined,
-                    marketingScoreColor(avg)),
-                InvStat('$top', 'Top score', Icons.emoji_events_outlined,
-                    marketingScoreColor(top)),
-              ],
-            ),
-            18.h,
-            _toolbar(crm, isMobile, regions),
-            14.h,
-            if (filtered.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Center(
-                  child: Column(children: [
-                    Icon(Icons.groups_outlined,
-                        size: 42, color: crm.textSecondary),
-                    10.h,
-                    Text('No competitors yet — add one or import a CSV',
-                        style: TextStyle(color: crm.textSecondary)),
-                  ]),
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              children: [
+                _header(regions),
+                const SizedBox(height: 14),
+                MktKpiRow(
+                  children: [
+                    MktKpiCard(icon: Icons.groups_2_outlined, value: '${all.length}', label: 'Competitors', tint: Mkt.primary),
+                    MktKpiCard(icon: Icons.event_available_outlined, value: '$tracked', label: 'Tracked this week', tint: Mkt.blue),
+                    MktKpiCard(icon: Icons.speed_outlined, value: '$avg', label: 'Avg score', tint: marketingScoreColor(avg)),
+                    MktKpiCard(icon: Icons.emoji_events_outlined, value: '$top', label: 'Top score', tint: marketingScoreColor(top)),
+                  ],
                 ),
-              )
-            else
-              ...filtered.map((c) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _competitorCard(crm, c),
-                  )),
-          ],
-        );
-      },
+                const SizedBox(height: 12),
+                MktCard(
+                  title: 'All competitors',
+                  icon: Icons.radar_outlined,
+                  subtitle: '${filtered.length} of ${all.length}',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _searchField(),
+                      const SizedBox(height: 6),
+                      if (filtered.isEmpty)
+                        const MktEmpty('No competitors yet — add one or import a CSV', icon: Icons.groups_outlined, height: 140)
+                      else
+                        for (var i = 0; i < filtered.length; i++) _competitorRow(filtered[i], last: i == filtered.length - 1),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
   bool _sameWeek(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  Widget _header(CrmTheme crm, bool isMobile) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Competitor Master Database',
-              style: TextStyle(
-                  fontSize: isMobile ? 21 : 27,
-                  fontWeight: FontWeight.w800,
-                  color: crm.textPrimary)),
-          4.h,
-          Text('Track competitors and record weekly growth signals.',
-              style: TextStyle(fontSize: 13, color: crm.textSecondary)),
-        ],
-      );
-
-  Widget _toolbar(CrmTheme crm, bool isMobile, List<ServiceRegion> regions) =>
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: isMobile ? double.infinity : 260,
-            child: TextField(
-              onChanged: (v) => setState(() => _query = v.trim()),
-              decoration: InputDecoration(
-                hintText: 'Search name, city, region',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
+  Widget _header(List<ServiceRegion> regions) => MktHeader(
+        icon: Icons.radar_outlined,
+        title: 'Competitors',
+        subtitle: 'Track competitors and record weekly growth signals.',
+        actions: [
           // Region filter — sourced from our geographics.
-          SizedBox(
-            width: isMobile ? double.infinity : 220,
-            child: DropdownButtonFormField<String>(
-              initialValue: _regionFilter,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Region',
-                prefixIcon: const Icon(Icons.public, size: 20),
-                isDense: true,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('All regions')),
-                const DropdownMenuItem(
-                    value: '__none__', child: Text('No region')),
-                for (final r in regions)
-                  DropdownMenuItem(value: r.id, child: Text(r.name)),
-              ],
-              onChanged: (v) => setState(() => _regionFilter = v ?? ''),
-            ),
+          MktDropdownPill<String>(
+            value: _regionFilter,
+            icon: Icons.public,
+            options: [
+              ('', 'All regions'),
+              ('__none__', 'No region'),
+              for (final r in regions) (r.id, r.name),
+            ],
+            onChanged: (v) => setState(() => _regionFilter = v),
           ),
-          FilledButton.icon(
-            onPressed: () => _editCompetitor(null),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add competitor'),
-          ),
-          OutlinedButton.icon(
-            onPressed: _importCsv,
-            icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Import CSV'),
-          ),
+          MktPill(label: 'Import CSV', icon: Icons.upload_file, trailing: false, onTap: _importCsv),
+          MktPrimaryButton(label: 'Add competitor', onPressed: () => _editCompetitor(null)),
         ],
       );
 
-  Widget _competitorCard(CrmTheme crm, Competitor c) {
+  Widget _searchField() => SizedBox(
+        height: 38,
+        child: TextField(
+          onChanged: (v) => setState(() => _query = v.trim()),
+          style: mktText(13),
+          decoration: InputDecoration(
+            hintText: 'Search name, city, region',
+            hintStyle: mktText(13, color: Mkt.inkSoft),
+            prefixIcon: const Icon(Icons.search, size: 18, color: Mkt.inkSoft),
+            isDense: true,
+            filled: true,
+            fillColor: Mkt.bg,
+            contentPadding: const EdgeInsets.symmetric(vertical: 9),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.primary)),
+          ),
+        ),
+      );
+
+  Widget _competitorRow(Competitor c, {required bool last}) {
     final snap = c.latestSnapshot;
     final socials = [
       if (c.instagram.isNotEmpty) 'IG',
@@ -206,12 +169,10 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
       if (c.linkedin.isNotEmpty) 'IN',
     ].join(' · ');
     return Container(
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
       decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border),
+        border: last ? null : const Border(bottom: BorderSide(color: Mkt.border)),
       ),
-      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -225,10 +186,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                       child: Text(c.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
+                          style: mktText(14.5, weight: FontWeight.w800)),
                     ),
                     8.w,
                     ScoreBadge(score: c.score),
@@ -244,7 +202,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                   ].join('  ·  '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                  style: mktText(12, color: Mkt.inkSoft),
                 ),
                 if (snap != null) ...[
                   10.h,
@@ -252,29 +210,22 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _pill(crm, 'Followers', _compact(snap.followers)),
-                      _pill(crm, 'Growth',
-                          '${snap.weeklyGrowthPct.toStringAsFixed(1)}%'),
-                      _pill(crm, 'Engmt',
-                          '${snap.engagementRate.toStringAsFixed(1)}%'),
-                      _pill(crm, 'Ads', '${snap.adCampaigns}'),
-                      _pill(crm, 'Week', _weekLabel(snap.weekOf)),
+                      _pill('Followers', _compact(snap.followers)),
+                      _pill('Growth', '${snap.weeklyGrowthPct.toStringAsFixed(1)}%'),
+                      _pill('Engmt', '${snap.engagementRate.toStringAsFixed(1)}%'),
+                      _pill('Ads', '${snap.adCampaigns}'),
+                      _pill('Week', _weekLabel(snap.weekOf)),
                     ],
                   ),
                 ],
               ],
             ),
           ),
+          8.w,
           Column(
             children: [
               _menu(c),
-              FilledButton.tonalIcon(
-                onPressed: () => _editSnapshot(c),
-                icon: const Icon(Icons.insights_outlined, size: 16),
-                label: const Text('Weekly'),
-                style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact),
-              ),
+              MktPill(label: 'Weekly', icon: Icons.insights_outlined, trailing: false, onTap: () => _editSnapshot(c)),
             ],
           ),
         ],
@@ -283,7 +234,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
   }
 
   Widget _menu(Competitor c) => PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert, color: context.crmColors.textSecondary),
+        icon: const Icon(Icons.more_vert, color: Mkt.inkSoft),
         onSelected: (v) {
           if (v == 'edit') _editCompetitor(c);
           if (v == 'delete') _deleteCompetitor(c);
@@ -294,27 +245,17 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
         ],
       );
 
-  Widget _pill(CrmTheme crm, String k, String v) => Container(
+  Widget _pill(String k, String v) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
         decoration: BoxDecoration(
-          color: crm.input,
+          color: Mkt.bg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: crm.border),
+          border: Border.all(color: Mkt.border),
         ),
         child: RichText(
           text: TextSpan(children: [
-            TextSpan(
-                text: '$k  ',
-                style: TextStyle(
-                    color: crm.textSecondary,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600)),
-            TextSpan(
-                text: v,
-                style: TextStyle(
-                    color: crm.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800)),
+            TextSpan(text: '$k  ', style: mktText(10.5, weight: FontWeight.w600, color: Mkt.inkSoft)),
+            TextSpan(text: v, style: mktText(12, weight: FontWeight.w800)),
           ]),
         ),
       );
@@ -506,7 +447,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
               child: const Text('Cancel')),
           FilledButton(
               style: FilledButton.styleFrom(
-                  backgroundColor: context.crmColors.destructive),
+                  backgroundColor: Mkt.bad),
               onPressed: () => Navigator.pop(dctx, true),
               child: const Text('Delete')),
         ],
@@ -525,7 +466,6 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
 
   // ── CSV import ──────────────────────────────────────────────────────────
   Future<void> _importCsv() async {
-    final crm = context.crmColors;
     final textCtrl = TextEditingController();
     var busy = false;
     String? summary;
@@ -581,7 +521,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                   'contentThemes, and yes/no flags: newCampaign, viralContent, '
                   'qualityCreative, followerGrowth, engagementIncrease, '
                   'newService, newPartnership. "name" is required.',
-                  style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                  style: mktText(12, color: Mkt.inkSoft),
                 ),
                 12.h,
                 Row(children: [
@@ -608,7 +548,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                   ),
                   10.w,
                   Text('or paste below',
-                      style: TextStyle(color: crm.textSecondary, fontSize: 12)),
+                      style: mktText(12, color: Mkt.inkSoft)),
                 ]),
                 12.h,
                 TextField(
@@ -628,8 +568,8 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                   Text(summary!,
                       style: TextStyle(
                           color: summary!.startsWith('✓')
-                              ? crm.success
-                              : crm.destructive,
+                              ? Mkt.good
+                              : Mkt.bad,
                           fontWeight: FontWeight.w600)),
                 ],
               ],

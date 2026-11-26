@@ -9,15 +9,19 @@ import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/presentation/socials/post_editor.dart';
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
+import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
-/// Socials → Publishing & Accounts: the accounts the team posts on (with followers) and the queue of what is waiting to go out.
-/// No platform API is connected, so an account is "Manual": posts and figures are typed in.
+/// Socials → Publishing & Accounts: the accounts the team posts on (with followers), the queue of what is scheduled to go out and what
+/// went out — both in the shared date range (filtered on the server). No platform API is connected, so an account is "Manual": posts
+/// and figures are typed in.
 class SocialsPublishingTab extends ConsumerWidget {
   const SocialsPublishingTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(socialsPublishingProvider);
+    final f = ref.watch(teamFilterProvider);
+    final range = '${DateFormat('d MMM').format(f.from)} – ${DateFormat('d MMM yyyy').format(f.to)}';
     return RefreshIndicator(
       onRefresh: () async => refreshSocials(ref),
       child: async.when(
@@ -29,8 +33,8 @@ class SocialsPublishingTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
             MktGrid(breakpoint: 900, rows: [
-              [(5, _AccountsCard(accounts: d.accounts)), (7, _QueueCard(queue: d.queue))],
-              [(12, _RecentCard(recent: d.recent))],
+              [(5, _AccountsCard(accounts: d.accounts)), (7, _QueueCard(queue: d.queue, range: range))],
+              [(12, _RecentCard(recent: d.recent, range: range))],
             ]),
           ],
         ),
@@ -48,7 +52,7 @@ class _AccountsCard extends ConsumerWidget {
     return MktCard(
       title: 'Connected Accounts',
       icon: Icons.link_rounded,
-      trailing: TextButton(key: const Key('soc_account_add'), onPressed: () => _showAccountForm(context, ref), child: Text('+ Add account', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.violet))),
+      trailing: TextButton(key: const Key('soc_account_add'), onPressed: () => _showAccountForm(context, ref), child: Text('+ Add account', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.primary))),
       child: accounts.isEmpty
           ? const MktEmpty('No account is listed yet. Add the pages the team posts on.', icon: Icons.link_off_rounded)
           : Column(children: [
@@ -60,7 +64,7 @@ class _AccountsCard extends ConsumerWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(children: [
-                      Container(width: 34, height: 34, decoration: BoxDecoration(color: Mkt.tint(Mkt.violet), borderRadius: BorderRadius.circular(10)), child: Icon(platformIcon(a.platform), size: 18, color: Mkt.violet)),
+                      Container(width: 34, height: 34, decoration: BoxDecoration(color: Mkt.tint(Mkt.primary), borderRadius: BorderRadius.circular(10)), child: Icon(platformIcon(a.platform), size: 18, color: Mkt.primary)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -173,17 +177,19 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
 }
 
 class _QueueCard extends ConsumerWidget {
-  const _QueueCard({required this.queue});
+  const _QueueCard({required this.queue, required this.range});
   final List<SocialPost> queue;
+  final String range;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MktCard(
       title: 'Publishing Queue (${queue.length})',
+      subtitle: 'Scheduled $range',
       icon: Icons.schedule_send_outlined,
       trailing: MktPrimaryButton(key: const Key('soc_schedule_post'), label: 'Schedule Post', onPressed: () => showPostEditor(context, ref, status: 'scheduled')),
       child: queue.isEmpty
-          ? const MktEmpty('Nothing is waiting to go out. Schedule a post, or send one for review from the calendar.', icon: Icons.schedule_send_outlined)
+          ? const MktEmpty('Nothing is scheduled in these days. Schedule a post, send one for review from the calendar, or widen the dates.', icon: Icons.schedule_send_outlined)
           : Column(children: [
               for (final p in queue)
                 InkWell(
@@ -214,16 +220,18 @@ class _QueueCard extends ConsumerWidget {
 }
 
 class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.recent});
+  const _RecentCard({required this.recent, required this.range});
   final List<SocialPost> recent;
+  final String range;
 
   @override
   Widget build(BuildContext context) {
     return MktCard(
-      title: 'Recently Published',
+      title: 'Published',
+      subtitle: range,
       icon: Icons.check_circle_outline_rounded,
       child: recent.isEmpty
-          ? const MktEmpty('Nothing has been published yet.', icon: Icons.check_circle_outline_rounded, height: 80)
+          ? const MktEmpty('Nothing was published in these days.', icon: Icons.check_circle_outline_rounded, height: 80)
           : Column(children: [
               for (final p in recent)
                 Padding(

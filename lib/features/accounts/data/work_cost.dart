@@ -400,6 +400,24 @@ class WorkCostRow {
       );
 }
 
+/// The kinds of spend a work's cost is split into, in the order they are shown.
+const workCostCategories = ['food', 'travel', 'stay', 'materials', 'fuel', 'other'];
+
+/// What a kind of spend is called on screen.
+String workCostCategoryLabel(String c) => switch (c) {
+      'food' => 'Food',
+      'travel' => 'Travel',
+      'stay' => 'Stay',
+      'materials' => 'Materials',
+      'fuel' => 'Fuel',
+      _ => 'Other',
+    };
+
+Map<String, double> _byCategory(Object? v) {
+  final m = v is Map ? v : const {};
+  return {for (final c in workCostCategories) c: _d(m[c])};
+}
+
 class WorkCostTotals {
   final double food;
   final double other;
@@ -413,6 +431,13 @@ class WorkCostTotals {
   final int overAllowanceCount;
   final double overAllowanceAmount;
 
+  /// What sits UNDER works, per kind of spend (food, travel, stay, materials, fuel, other) —
+  /// every key is always present.
+  final Map<String, double> byCategory;
+
+  /// What is NOT tied to a work, per kind of spend (same keys).
+  final Map<String, double> unplacedByCategory;
+
   const WorkCostTotals({
     required this.food,
     required this.other,
@@ -421,8 +446,19 @@ class WorkCostTotals {
     required this.unplacedCount,
     this.overAllowanceCount = 0,
     this.overAllowanceAmount = 0,
+    this.byCategory = const {},
+    this.unplacedByCategory = const {},
   });
   static const zero = WorkCostTotals(food: 0, other: 0, total: 0, unplaced: 0, unplacedCount: 0);
+
+  /// Under works, for one kind of spend (0 when the server did not say).
+  double under(String category) => byCategory[category] ?? 0;
+
+  /// Not tied to a work, for one kind of spend.
+  double notUnder(String category) => unplacedByCategory[category] ?? 0;
+
+  /// Both together — what was spent on this kind in the period, placed or not.
+  double all(String category) => under(category) + notUnder(category);
 
   factory WorkCostTotals.fromJson(Map<String, dynamic> j) => WorkCostTotals(
         food: _d(j['food']),
@@ -432,6 +468,8 @@ class WorkCostTotals {
         unplacedCount: (j['unplacedCount'] as num?)?.toInt() ?? 0,
         overAllowanceCount: (j['overAllowanceCount'] as num?)?.toInt() ?? 0,
         overAllowanceAmount: _d(j['overAllowanceAmount']),
+        byCategory: _byCategory(j['byCategory']),
+        unplacedByCategory: _byCategory(j['unplacedByCategory']),
       );
 }
 
@@ -443,6 +481,13 @@ class WorkCostPage {
   final int totalPages;
   final WorkCostTotals totals;
 
+  /// The entries NOT under any work (fuel or travel with no booking chosen, a stay…), each with
+  /// the reason — so Accounts can see what they are, not just a number.
+  final List<CostLine> unplaced;
+
+  /// More unplaced entries matched than this response lists.
+  final bool unplacedTruncated;
+
   /// More expenses matched than the server reads at once, so the figures are partial.
   final bool truncated;
 
@@ -453,6 +498,8 @@ class WorkCostPage {
     required this.totalItems,
     required this.totalPages,
     required this.totals,
+    this.unplaced = const [],
+    this.unplacedTruncated = false,
     required this.truncated,
   });
 
@@ -463,6 +510,8 @@ class WorkCostPage {
         totalItems: (j['totalItems'] as num?)?.toInt() ?? 0,
         totalPages: (j['totalPages'] as num?)?.toInt() ?? 1,
         totals: j['totals'] is Map ? WorkCostTotals.fromJson((j['totals'] as Map).cast<String, dynamic>()) : WorkCostTotals.zero,
+        unplaced: [for (final l in (j['unplaced'] as List? ?? const [])) CostLine.fromJson((l as Map).cast<String, dynamic>())],
+        unplacedTruncated: j['unplacedTruncated'] == true,
         truncated: j['truncated'] == true,
       );
 }

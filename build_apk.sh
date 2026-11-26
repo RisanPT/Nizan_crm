@@ -12,6 +12,9 @@ grep API_BASE_URL .env.production || {
 }
 echo ""
 
+# Prevent stale Kotlin incremental compilation mismatch in plugins
+rm -rf build/record_android
+
 flutter build apk --release --dart-define-from-file=.env.production --android-skip-build-dependency-validation "$@"
 
 echo ""

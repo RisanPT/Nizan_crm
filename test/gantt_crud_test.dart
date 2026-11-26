@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/models/auth_session.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/domain/repositories/it_task_repository.dart';
@@ -71,7 +72,10 @@ class _Repo implements IITTaskRepository {
 class _Service implements ITTaskService {
   final created = <Map<String, dynamic>>[];
   @override
-  Future<void> createTask(Map<String, dynamic> body) async => created.add(body);
+  Future<TaskSaveResult> createTask(Map<String, dynamic> body) async {
+    created.add(body);
+    return const TaskSaveResult();
+  }
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
@@ -208,7 +212,7 @@ void main() {
     testWidgets('the wizard opens from it', (tester) async {
       await _pump(tester);
       await _pick(tester, 'gantt_add', 'Plan a function (wizard)…');
-      expect(find.text('Functional Plan & Gantt Auto-Scheduler'), findsOneWidget);
+      expect(find.text('Functional Plan & Gratt Auto-Scheduler'), findsOneWidget);
       // it knows the plan is already there
       expect(_k('wizard_existing_note'), findsOneWidget);
     });
@@ -472,7 +476,7 @@ void main() {
     testWidgets('Plan IT function… opens the wizard planning for IT', (tester) async {
       await _pump(tester, tasks: tasks, mode: GanttSwimlaneMode.byDepartment, project: cross);
       await _pick(tester, 'gantt_lane_add_dept-IT', 'Plan IT function…');
-      expect(find.text('Functional Plan & Gantt Auto-Scheduler'), findsOneWidget);
+      expect(find.text('Functional Plan & Gratt Auto-Scheduler'), findsOneWidget);
       final dept = tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>).first);
       expect(dept.initialValue, 'IT');
     });

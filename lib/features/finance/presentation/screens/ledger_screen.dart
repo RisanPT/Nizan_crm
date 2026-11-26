@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -220,8 +221,10 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
   }
 
   Future<void> _exportCsv(AccountLedger l) async {
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      ['Ledger: ${l.code} · ${l.name}'],
+      ['Ledger: ${l.code} · ${l.name}', 'Period: ${period.label}'],
       ['Date', 'Voucher', 'Type', 'Particulars', 'Debit', 'Credit', 'Balance', 'Side'],
       ['', '', '', 'Opening balance', '', '', csvNum(l.openingBalance), l.openingSide.toUpperCase()],
       for (final r in l.rows)
@@ -240,7 +243,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
     ];
     final safeName = l.code.isEmpty ? 'ledger' : 'ledger_${l.code}';
     try {
-      await downloadCsv('$safeName.csv', rows);
+      await downloadCsv('${safeName}_${period.fileTag}.csv', rows);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Ledger exported')));

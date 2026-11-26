@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -538,8 +539,10 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
     if (rep == null) return;
     final header = <Object?>[spec.labelHeader, 'Detail', spec.countHeader, spec.amountHeader];
     if (spec.showReceived) header.add('Received');
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      [spec.title],
+      [spec.title, 'Period: ${period.label}'],
       header,
       for (final r in rep.rows)
         [
@@ -558,7 +561,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
       ],
     ];
     try {
-      await downloadCsv('${spec.csvName}.csv', rows);
+      await downloadCsv('${spec.csvName}_${period.fileTag}.csv', rows);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${spec.title} exported')));
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);

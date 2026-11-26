@@ -33,33 +33,33 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Step 1: Function Overview
-    expect(find.text('Functional Plan & Gantt Auto-Scheduler'), findsOneWidget);
+    expect(find.text('Functional Plan & Gratt Auto-Scheduler'), findsOneWidget);
     expect(find.text('Function Overview'), findsOneWidget);
     expect(find.text('Quick WBS Template'), findsNothing); // nothing is pre-filled
-    expect(find.text('Continue'), findsOneWidget);
+    expect(find.byKey(const Key('wizard_next')), findsOneWidget);
 
     // Tap Continue to Step 2: Phases & WBS
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const Key('wizard_next')));
     await tester.pumpAndSettle();
 
     expect(find.text('Milestones & Phases (WBS)'), findsOneWidget);
     expect(find.text('Add Phase'), findsOneWidget);
 
     // Tap Continue to Step 3: Tasks & Team
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const Key('wizard_next')));
     await tester.pumpAndSettle();
 
     expect(find.text('Tasks & Ownership'), findsOneWidget);
     expect(find.text('Add Task'), findsOneWidget);
 
-    // Tap Continue to Step 4: Dependencies & Gantt Auto-Schedule
-    await tester.tap(find.text('Continue'));
+    // Tap Continue to Step 4: Dependencies & Gratt Auto-Schedule
+    await tester.tap(find.byKey(const Key('wizard_next')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Dependencies & Gantt Auto-Schedule'), findsOneWidget);
+    expect(find.text('Dependencies & Gratt Auto-Schedule'), findsOneWidget);
     expect(find.text('Total Duration'), findsOneWidget);
     expect(find.text('Critical Path'), findsAtLeastNWidgets(1));
-    expect(find.text('Generate Gantt Plan'), findsOneWidget);
+    expect(find.text('Generate Gratt Plan'), findsOneWidget);
   });
 
   testWidgets('FunctionalPlanWizardDialog scopes to IT department for IT project', (tester) async {
@@ -179,16 +179,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // Navigate to Step 4
-    await tester.tap(find.text('Continue')); // Step 2
+    await tester.tap(find.byKey(const Key('wizard_next'))); // Step 2
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue')); // Step 3
+    await tester.tap(find.byKey(const Key('wizard_next'))); // Step 3
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue')); // Step 4
+    await tester.tap(find.byKey(const Key('wizard_next'))); // Step 4
     await tester.pumpAndSettle();
 
     // Initially clean sequence without circular dependency
     expect(find.text('Circular dependency loop detected. Please resolve loops between tasks.'), findsNothing);
-    expect(find.text('Generate Gantt Plan'), findsOneWidget);
+    expect(find.text('Generate Gratt Plan'), findsOneWidget);
 
     // Downstream tasks are NOT eligible as predecessors: "First" cannot be made to wait for "Second", which waits for it
     // and "Second" has nothing left to add either (it already waits for the only other task): no "add dependency" anywhere

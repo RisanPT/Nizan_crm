@@ -279,7 +279,7 @@ class ArtistPayoutsScreen extends ConsumerWidget {
                           DropdownMenuItem(
                             value: a.id,
                             child: Text(
-                                '${a.name}${a.type == 'outsource' ? '  · Freelance' : ''}',
+                                '${a.name}${a.isAssociate ? '  · Associate' : (a.type == 'outsource' ? '  · Freelance' : '')}',
                                 overflow: TextOverflow.ellipsis),
                           ),
                       ],

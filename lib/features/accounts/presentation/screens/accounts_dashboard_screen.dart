@@ -282,12 +282,14 @@ class _AccountsDashboardScreenState
           items: expenses,
           getVehicleName: (_) => null,
           getDriverName: (_) => null,
-          headers: const ['Date', 'Category', 'Notes', 'Amount', 'Status'],
+          headers: const ['Date', 'Category', 'Notes', 'Amount', 'Logged amount', 'Status'],
           buildRow: (e) => [
             DateFormat('yyyy-MM-dd').format(e.date),
             _cap(e.category),
             e.notes,
             e.amount.toStringAsFixed(2),
+            // only when the approval reduced it: what the artist logged
+            e.isReduced ? e.loggedAmount!.toStringAsFixed(2) : '',
             e.status,
           ],
         ),
