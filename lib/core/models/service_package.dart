@@ -136,6 +136,21 @@ class QuoteInclusions {
       {'technique': technique, 'products': products, 'included': included};
 }
 
+/// Booking advance rule (same in New booking, Edit booking and the Bridal Quote):
+///  • the package's own advance (Services → Packages), whatever the district;
+///    none set → 15% of the price, at least ₹5,000 (never above the price);
+///  • with add-ons: 15% of package + add-ons (before discount, travel not
+///    counted) when that is higher than the package's advance.
+const kAdvancePercent = 15;
+const kMinAdvance = 5000.0;
+
+double defaultAdvanceForPrice(double price) {
+  if (price <= 0) return 0;
+  final pct = (price * kAdvancePercent / 100).roundToDouble();
+  final a = pct < kMinAdvance ? kMinAdvance : pct;
+  return a > price ? price : a;
+}
+
 class ServicePackage {
   final String id;
   final String name;
@@ -162,6 +177,15 @@ class ServicePackage {
   /// Saved inclusions, else the built-in ones for a known package name.
   QuoteInclusions? get effectiveQuoteInclusions =>
       quoteInclusions ?? QuoteInclusions.builtInFor(name);
+
+  /// Advance for this package at [price] (the price quoted / booked) with
+  /// [addons] worth of add-ons. See [defaultAdvanceForPrice] for the rule.
+  double bookingAdvance({required double price, double addons = 0}) {
+    final base = advanceAmount > 0 ? advanceAmount : defaultAdvanceForPrice(price);
+    if (addons <= 0) return base;
+    final pct = ((price + addons) * kAdvancePercent / 100).roundToDouble();
+    return pct > base ? pct : base;
+  }
 
   double effectivePriceForRegion(String? regionId) {
     if (regionId == null || regionId.isEmpty) return price;

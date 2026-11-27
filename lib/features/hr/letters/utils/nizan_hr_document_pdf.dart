@@ -925,20 +925,14 @@ Future<Uint8List> generateOfferLetterPdf({
       ? offer.incentiveNote
       : 'Rs. ${NumberFormat('#,##,###').format(offer.incentive)} incentive will be applicable based on the company’s predefined Performance criteria';
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PAGE 1: Header banner, Title, Issue Date, Salutation, Intro, Resp 1-7
-  // ══════════════════════════════════════════════════════════════════════════
-  doc.addPage(
-    pw.Page(
-      pageTheme: pw.PageTheme(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(48, 178, 48, 115),
-        buildBackground: (_) => _buildOfferPageBackground(isFirstPage: true, a4Width: a4Width),
-      ),
-      build: (ctx) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
+  // The letter FLOWS from page to page (2026-11-26). It used to be four fixed
+  // pages (intro + 7 responsibilities | the rest + salary | policies |
+  // additional policies + signatures), each starting on a new sheet however
+  // little was on the one before, which left half-empty pages. The content
+  // and its order are unchanged; only the forced page breaks are gone.
+
+  // Title, Issue Date, Salutation, Intro, Responsibilities 1-7
+  final page1 = <pw.Widget>[
             pw.Center(
               child: pw.Text(
                 'EMPLOYMENT OFFER LETTER',
@@ -1003,26 +997,10 @@ Future<Uint8List> generateOfferLetterPdf({
                 padding: const pw.EdgeInsets.only(bottom: 6),
                 child: _buildNumberedResponsibility(number: i + 1, itemText: page1Resp[i]),
               ),
-          ],
-        );
-      },
-    ),
-  );
+  ];
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PAGE 2: Resp 8-15, Salary Structure table, Incentive Note
-  // ══════════════════════════════════════════════════════════════════════════
-  doc.addPage(
-    pw.Page(
-      pageTheme: pw.PageTheme(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(48, 100, 48, 115),
-        buildBackground: (_) => _buildOfferPageBackground(isFirstPage: false, a4Width: a4Width),
-      ),
-      build: (ctx) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
+  // Responsibilities 8+, Salary Structure table, Incentive Note
+  final page2 = <pw.Widget>[
             for (int i = 0; i < page2Resp.length; i++)
               pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 6),
@@ -1109,11 +1087,7 @@ Future<Uint8List> generateOfferLetterPdf({
                 ),
               ),
             ],
-          ],
-        );
-      },
-    ),
-  );
+  ];
 
   // ══════════════════════════════════════════════════════════════════════════
   // PAGE 3: Probation Period, Policies, Wedding Industry Specific Policies
@@ -1139,17 +1113,8 @@ Future<Uint8List> generateOfferLetterPdf({
     'Social Media During Events: Use social media only with proper permission from clients/company',
   ];
 
-  doc.addPage(
-    pw.Page(
-      pageTheme: pw.PageTheme(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(48, 100, 48, 115),
-        buildBackground: (_) => _buildOfferPageBackground(isFirstPage: false, a4Width: a4Width),
-      ),
-      build: (ctx) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
+  // Probation Period, Policies, Wedding Industry Specific Policies
+  final page3 = <pw.Widget>[
             pw.Text(
               'PROBATION PERIOD',
               style: pw.TextStyle(
@@ -1205,11 +1170,7 @@ Future<Uint8List> generateOfferLetterPdf({
                 padding: const pw.EdgeInsets.only(bottom: 5),
                 child: _buildOfferBulletPoint(wp),
               ),
-          ],
-        );
-      },
-    ),
-  );
+  ];
 
   // ══════════════════════════════════════════════════════════════════════════
   // PAGE 4: Additional Policies, SINCERELY / Acknowledge by Signatures
@@ -1222,17 +1183,8 @@ Future<Uint8List> generateOfferLetterPdf({
     'Termination Policy - The company reserves the right to terminate employment without a notice period in cases of serious misconduct, policy violations, or actions that adversely affect the organization.',
   ];
 
-  doc.addPage(
-    pw.Page(
-      pageTheme: pw.PageTheme(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(48, 100, 48, 115),
-        buildBackground: (_) => _buildOfferPageBackground(isFirstPage: false, a4Width: a4Width),
-      ),
-      build: (ctx) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
+  // Additional Policies, SINCERELY / Acknowledge by Signatures
+  final page4 = <pw.Widget>[
             pw.Text(
               'Additional Policies:-',
               style: pw.TextStyle(
@@ -1280,9 +1232,27 @@ Future<Uint8List> generateOfferLetterPdf({
                 ),
               ],
             ),
-          ],
-        );
-      },
+  ];
+
+  // One flowing document. Page 1 has the tall header banner, so its content
+  // starts lower (the old page-1 top margin of 178 = 100 + 78 extra).
+  doc.addPage(
+    pw.MultiPage(
+      pageTheme: pw.PageTheme(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(48, 100, 48, 115),
+        buildBackground: (ctx) => _buildOfferPageBackground(isFirstPage: ctx.pageNumber == 1, a4Width: a4Width),
+      ),
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      header: (ctx) => ctx.pageNumber == 1 ? pw.SizedBox(height: 78) : pw.SizedBox(),
+      build: (ctx) => [
+        ...page1,
+        ...page2,
+        pw.SizedBox(height: 18),
+        ...page3,
+        pw.SizedBox(height: 18),
+        ...page4,
+      ],
     ),
   );
 

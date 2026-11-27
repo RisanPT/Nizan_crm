@@ -372,7 +372,12 @@ class _BasicInfoCard extends StatelessWidget {
                       decoration: _inputDeco(
                         'Advance Amount',
                         crmColors,
-                      ).copyWith(prefixText: '₹ '),
+                      ).copyWith(
+                        prefixText: '₹ ',
+                        helperText: 'Same in every district. With add-ons: 15% of '
+                            'package + add-ons if higher.',
+                        helperMaxLines: 2,
+                      ),
                       validator: _validateMoney,
                     ),
                   ),

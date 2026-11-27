@@ -105,11 +105,12 @@ class AddBookingScreen extends HookConsumerWidget {
     double linePrice(_Line l) => l.packageId == _kCustom
         ? l.customAmount
         : (pkgById(l.packageId)?.effectivePriceForDistrict(l.districtId) ?? 0);
-    double lineAdvance(_Line l) => l.packageId == _kCustom
-        ? 0
-        : (pkgById(l.packageId)?.advanceAmount ?? 0);
     double addonsOf(_Line l) =>
         l.addons.fold<double>(0, (s, a) => s + a.amount * a.persons);
+    // Package advance; with add-ons 15% of package + add-ons when higher.
+    double lineAdvance(_Line l) => l.packageId == _kCustom
+        ? 0
+        : (pkgById(l.packageId)?.bookingAdvance(price: linePrice(l), addons: addonsOf(l)) ?? 0);
 
     final allLines = [for (final d in days.value) ...d.lines];
     // the artist preview (smart allocation): the packages as the booking will send them

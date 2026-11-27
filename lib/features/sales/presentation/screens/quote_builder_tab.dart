@@ -221,10 +221,10 @@ const Map<String, (String, String)> _profiles = {
   ),
 };
 
-/// Advance shown on the quote: 15% of the quoted package price.
-const _advanceShare = 0.15;
-String _advanceFor(double? price) =>
-    price == null ? 'Advance 15%' : 'Advance ${_inr((price * _advanceShare).roundToDouble())}';
+/// Advance for a package at a price, without add-ons
+/// (ServicePackage.bookingAdvance).
+String _advanceFor(_Pkg p, double? price) =>
+    price == null ? 'Advance on request' : 'Advance ${_inr(p.erp.bookingAdvance(price: price))}';
 
 
 // includedIn holds Services package names (lower-case).
@@ -332,6 +332,22 @@ class _Quote {
   final double travel, discount, advance;
   final Map<String, _Totals> totals;
 
+  /// Advance per quoted package (package advance; with add-ons 15% of
+  /// package + add-ons when higher) and for a multi-day programme.
+  final Map<String, double> advances;
+  final double programAdvance;
+
+  /// The advance line for the client: the typed override when set, else the
+  /// worked-out advance. Empty for an add-ons-only quote with no override.
+  String get advanceText {
+    if (advance > 0) return _inr(advance);
+    if (multi) return programAdvance > 0 ? _inr(programAdvance) : '';
+    final shown = [for (final p in pkgs) if ((advances[p.id] ?? 0) > 0) p];
+    if (shown.isEmpty) return '';
+    if (shown.length == 1) return _inr(advances[shown.first.id]!);
+    return shown.map((p) => '${p.name} ${_inr(advances[p.id]!)}').join(' · ');
+  }
+
   /// Multi-day programme mode: [program] lists each day; [pkgs] are the
   /// distinct packages used (for "What's Included").
   final bool multi;
@@ -387,6 +403,8 @@ class _Quote {
     required this.discount,
     required this.advance,
     required this.totals,
+    this.advances = const {},
+    this.programAdvance = 0,
     this.multi = false,
     this.program = const [],
   });
@@ -735,6 +753,33 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
           return _Totals(base, add, max(0, base + add + travel - discount));
         }(),
     };
+    // Two kinds of quote:
+    //  • comparison (2+ packages ticked): each package's own advance
+    //    (e.g. ₹5,000 / ₹10,000), add-ons or not;
+    //  • final (1 package ticked, the client's choice): 15% of package +
+    //    add-ons (before discount, travel not counted), never below the
+    //    package's own advance.
+    final finalQuote = pkgs.length == 1;
+    final advances = {
+      for (final p in pkgs)
+        if (prices[p.id] != null)
+          p.id: () {
+            final t = totals[p.id]!;
+            final own = p.erp.bookingAdvance(price: t.base);
+            if (!finalQuote) return own;
+            return max(own, ((t.base + t.add) * kAdvancePercent / 100).roundToDouble());
+          }(),
+    };
+    var programAdvance = 0.0;
+    if (_multi) {
+      for (final d in program) {
+        if (d.pkg != null && d.amount != null) programAdvance += d.pkg!.erp.bookingAdvance(price: d.amount!);
+      }
+      final pTotal = program.fold<double>(0, (s, d) => s + (d.amount ?? 0));
+      final pAddons = lines.fold<double>(0, (s, l) =>
+          s + (l.amount == null || used.any((p) => l.addon.includedIn.contains(p.key)) ? 0 : l.amount!));
+      if (pAddons > 0) programAdvance = max(programAdvance, ((pTotal + pAddons) * kAdvancePercent / 100).roundToDouble());
+    }
     final today = DateTime.now();
     final days = _num(_validDays).round();
     return _Quote(
@@ -757,6 +802,8 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       discount: discount,
       advance: _num(_advance),
       totals: totals,
+      advances: advances,
+      programAdvance: programAdvance,
       multi: _multi,
       program: program,
     );
@@ -791,7 +838,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
         '${q.discount > 0 ? ' (after ${_inr(q.discount)} discount)' : ''}');
     if (q.onRequest) l.add('_Items on request are priced during consultation._');
     l.add('');
-    if (q.advance > 0) l.add('Booking advance: ${_inr(q.advance)} to confirm your dates.');
+    if (q.advanceText.isNotEmpty) l.add('Booking advance: *${q.advanceText}* to confirm your dates.');
     l.add('Quote valid until ${_fmtDate(q.validUntil)}.');
     if (q.notes.isNotEmpty) l.addAll(['', q.notes]);
     l.addAll(['', '_Your Look. Your Style. Your Day._ ✨']);
@@ -839,7 +886,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       if (q.onRequest) l.add('_Items on request are priced during consultation._');
       l.add('');
     }
-    if (q.advance > 0) l.add('Booking advance: ${_inr(q.advance)} to confirm your date.');
+    if (q.advanceText.isNotEmpty) l.add('Booking advance: *${q.advanceText}* to confirm your date.');
     l.add('Quote valid until ${_fmtDate(q.validUntil)}.');
     if (q.notes.isNotEmpty) l.addAll(['', q.notes]);
     l.addAll(['', '_Your Look. Your Style. Your Day._ ✨']);
@@ -1016,7 +1063,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     } else if (q.addonsOnly) {
       r.add('Total (add-ons only): ${_inr(q.addonsGrandTotal)}');
     }
-    if (q.advance > 0) r.add('Advance quoted: ${_inr(q.advance)}');
+    if (q.advanceText.isNotEmpty) r.add('Advance quoted: ${q.advanceText}');
 
     await showCreateLeadDialog(
       context,
@@ -1380,7 +1427,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
           ),
           row2(
             field('Valid for (days)', text(_validDays, number: true)),
-            field('Booking advance (₹)', text(_advance, number: true)),
+            field('Advance override (₹, 0 = auto)', text(_advance, number: true)),
           ),
           field('Note to client', text(_notes, lines: 3)),
         ]),
@@ -1867,7 +1914,7 @@ class _PkgOption extends StatelessWidget {
                     Text(
                       [
                         if (pkg.tech.isNotEmpty) pkg.tech,
-                        _advanceFor(price),
+                        _advanceFor(pkg, price),
                         if (districtPrice) 'district price',
                       ].join(' · '),
                       style: TextStyle(fontSize: 12, color: pal.muted),
@@ -2357,12 +2404,12 @@ class _QuoteSheet extends StatelessWidget {
                           style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: _sMuted),
                         ),
                       ),
-                    if (q.advance > 0)
+                    if (q.advanceText.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
                         child: Text.rich(TextSpan(children: [
                           const TextSpan(text: 'Booking advance: '),
-                          TextSpan(text: _inr(q.advance), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          TextSpan(text: q.advanceText, style: const TextStyle(fontWeight: FontWeight.w700)),
                           const TextSpan(text: ' to confirm your date.'),
                         ]), style: const TextStyle(fontSize: 13.5)),
                       ),
@@ -2521,9 +2568,12 @@ class _QuoteSheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text((p.tech.isNotEmpty ? p.tech : '${_advanceFor(price)} to book').toUpperCase(),
-                    style: const TextStyle(fontSize: 11.5, letterSpacing: 1.15, color: _sMuted)),
-                const SizedBox(height: 8),
+                // Technique only; the advance is in the line under the prices.
+                if (p.tech.isNotEmpty) ...[
+                  Text(p.tech.toUpperCase(),
+                      style: const TextStyle(fontSize: 11.5, letterSpacing: 1.15, color: _sMuted)),
+                  const SizedBox(height: 8),
+                ],
                 Text(p.name, style: display.copyWith(fontSize: 28, height: 1, letterSpacing: 1.12, color: _wine)),
                 const SizedBox(height: 8),
                 Text(price != null ? _inr(price) : 'On request',
